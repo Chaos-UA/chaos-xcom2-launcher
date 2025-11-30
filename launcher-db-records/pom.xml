@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>chaos.xcom.launcher</groupId>
+        <artifactId>chaos-xcom-launcher</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>launcher-db-records</artifactId>
+
+    <properties>
+        <root.baseDir>${project.parent.basedir}</root.baseDir>
+        <codegen.path>${project.build.directory}/generated-sources/src/main/java</codegen.path>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.xerial</groupId>
+            <artifactId>sqlite-jdbc</artifactId>
+        </dependency>
+
+        <dependency>
+            <!-- Look on matrix for supported PostgreSQL version syntax before changing version
+                 https://www.jooq.org/download/support-matrix -->
+            <groupId>org.jooq</groupId>
+            <artifactId>jooq</artifactId>
+            <version>${jooq.version}</version>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <phase>initialize</phase>
+                        <configuration>
+                            <target>
+                                <mkdir dir="${project.build.directory}" />
+                            </target>
+                        </configuration>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-maven-plugin</artifactId>
+                <version>11.17.1</version>
+
+                <configuration>
+                    <!-- SQLite JDBC URL -->
+                    <url>jdbc:sqlite:${build.directory}/database.db</url>
+                    <user>${db.username}</user>
+                    <password>${db.password}</password>
+
+                    <!-- Path to your migration scripts -->
+                    <locations>
+                        <location>filesystem:${root.baseDir}/launcher-db-migrations/src/main/resources/db/migration</location>
+                    </locations>
+
+                    <!-- Flyway for SQLite requires this: -->
+                    <driver>org.sqlite.JDBC</driver>
+                </configuration>
+
+                <executions>
+                    <execution>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>migrate</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+
+            <plugin>
+                <groupId>org.jooq</groupId>
+                <artifactId>jooq-codegen-maven</artifactId>
+                <version>${jooq.version}</version>
+                <configuration>
+                    <jdbc>
+                        <driver>org.sqlite.JDBC</driver>
+                        <url>jdbc:sqlite:${build.directory}/database.db</url>
+                        <user>${db.username}</user>
+                        <password>${db.password}</password>
+                    </jdbc>
+                    <generator>
+                        <database>
+                            <name>org.jooq.meta.sqlite.SQLiteDatabase</name>
+                            <outputSchemaToDefault>true</outputSchemaToDefault>
+                            <!-- List of tables to exclude. Use | as separator -->
+                            <excludes>
+                                flyway_schema_history
+                            </excludes>
+                            <forcedTypes>
+                                <forcedType>
+                                    <name>Integer</name> <!-- VarChar Or INTEGER if you're storing the enum as ordinal -->
+                                    <expression>payment_provider</expression>
+                                    <userType>chaos.db.enums.PaymentProvider</userType>
+                                </forcedType>
+                                <forcedType>
+                                    <name>Instant</name>
+                                    <types>DATETIME</types>
+                                </forcedType>
+                                <forcedType>
+                                    <name>Instant</name>
+                                    <types>TIMESTAMP</types>
+                                </forcedType>
+                                <forcedType>
+                                    <name>BIGINT</name>
+                                    <types>Integer</types>
+                                </forcedType>
+                            </forcedTypes>
+                        </database>
+                        <target>
+                            <packageName>chaos.db.gen</packageName>
+                            <directory>${codegen.path}</directory>
+                        </target>
+                    </generator>
+                </configuration>
+                <executions>
+                    <execution>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>add-source</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${codegen.path}</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>io.smallrye</groupId>
+                <artifactId>jandex-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>make-index</id>
+                        <goals>
+                            <goal>jandex</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+        </plugins>
+    </build>
+
+</project>

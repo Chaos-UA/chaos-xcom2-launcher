@@ -15,8 +15,8 @@ import javax.swing.border.TitledBorder;
 import java.awt.*;
 import java.awt.event.*;
 import java.io.File;
-import java.util.ArrayList;
-import java.util.TreeSet;
+import java.util.*;
+import java.util.List;
 
 @Dependent
 @RequiredArgsConstructor
@@ -26,6 +26,7 @@ public class SettingsDialog extends JDialog {
     private final DbProperties dbProps;
     private final LookAndFeelService lookAndFeelService;
     private final SettingsService settingsService;
+    private final List<JCheckBox> cbArgs = new ArrayList<>();
 
     private JPanel contentPane;
     private JButton buttonOK;
@@ -46,6 +47,8 @@ public class SettingsDialog extends JDialog {
     private JCheckBox cbArgAutoDebug;
     private JCheckBox cbArgNoSeekFreeLoading;
     private JCheckBox cbArgRegenerateinis;
+    private JScrollPane contentScrollPane;
+    private JCheckBox cbExitOnGameLaunch;
 
     public void openSettings() {
         this.setVisible(true);
@@ -65,12 +68,22 @@ public class SettingsDialog extends JDialog {
     @PostConstruct
     public void init() {
         setTitle("Settings");
-        setContentPane(contentPane);
+        setContentPane(contentScrollPane);
         setSize(1366, 768);
-        setMinimumSize(new Dimension(320, 240));
+        setMinimumSize(getPreferredSize());
+        setModal(true);
 
         getRootPane().setDefaultButton(buttonOK);
         setLocationRelativeTo(null);
+
+        cbArgs.add(cbArgReview);
+        cbArgs.add(cbArgNoRedScreens);
+        cbArgs.add(cbArgAllowConsole);
+        cbArgs.add(cbArgNoStartupMovies);
+        cbArgs.add(cbArgLog);
+        cbArgs.add(cbArgAutoDebug);
+        cbArgs.add(cbArgNoSeekFreeLoading);
+        cbArgs.add(cbArgRegenerateinis);
 
         buttonOK.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
@@ -109,9 +122,9 @@ public class SettingsDialog extends JDialog {
             if (result == JFileChooser.APPROVE_OPTION) {
                 File selectedDir = chooser.getSelectedFile();
                 String dir = selectedDir.getAbsolutePath();
-                TreeSet<String> uniqueDirs = new TreeSet<>(dbProps.modDirs.get());
+                TreeSet<String> uniqueDirs = new TreeSet<>(dbProps.modDirsForSearch.get());
                 uniqueDirs.add(dir);
-                dbProps.modDirs.set(new ArrayList<>(uniqueDirs));
+                dbProps.modDirsForSearch.set(new ArrayList<>(uniqueDirs));
                 log.info("Selected mod dir: {}", dir);
                 reloadModDirs();
             }
@@ -119,9 +132,9 @@ public class SettingsDialog extends JDialog {
         btnRemoveModDir.addActionListener((e) -> {
             String modDir = (String) jlModDirs.getSelectedValue();
             if (modDir != null) {
-                ArrayList<String> modDirs = new ArrayList<>(dbProps.modDirs.get());
+                ArrayList<String> modDirs = new ArrayList<>(dbProps.modDirsForSearch.get());
                 modDirs.remove(modDir);
-                dbProps.modDirs.set(new ArrayList<>(modDirs));
+                dbProps.modDirsForSearch.set(new ArrayList<>(modDirs));
                 log.info("Removed mod dir: {}", modDir);
                 reloadModDirs();
             }
@@ -152,11 +165,63 @@ public class SettingsDialog extends JDialog {
             SwingUtilities.invokeLater(() -> SwingUtilities.updateComponentTreeUI(this));
         });
 
+        reloadArgs();
+        for (JCheckBox cbArg : cbArgs) {
+            cbArg.addActionListener(e -> {
+                if (cbArg.isSelected()) {
+                    dbProps.gameLaunchArgs.addUnique(cbArg.getText());
+                } else {
+                    dbProps.gameLaunchArgs.remove(cbArg.getText());
+                }
+                reloadArgs();
+            });
+        }
+        tfGameLaunchArgs.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusLost(FocusEvent e) {
+                String argsStr = tfGameLaunchArgs.getText();
+                if (argsStr != null) {
+                    String[] args = argsStr.split(" ", -1);
+                    TreeSet<String> uniqueArgs = new TreeSet<>();
+                    for (String arg : args) {
+                        arg = arg.trim();
+                        if (!arg.isEmpty() && arg.length() != 1) {
+                            uniqueArgs.add(arg.trim());
+                        }
+                    }
+                    dbProps.gameLaunchArgs.set(new ArrayList<>(uniqueArgs));
+                }
+                reloadArgs();
+            }
+        });
+
+        reloadCbExitOnGameLaunch();
+        cbExitOnGameLaunch.addActionListener(e -> {
+            dbProps.exitOnGameLaunch.set(cbExitOnGameLaunch.isSelected());
+            reloadCbExitOnGameLaunch();
+        });
+    }
+
+    private void reloadCbExitOnGameLaunch() {
+        cbExitOnGameLaunch.setSelected(dbProps.exitOnGameLaunch.get());
+    }
+
+    private void reloadArgs() {
+        Set<String> selectedArgs = new LinkedHashSet<>(dbProps.gameLaunchArgs.get());
+        for (JCheckBox cbArg : cbArgs) {
+            cbArg.setSelected(selectedArgs.contains(cbArg.getText()));
+        }
+
+        StringBuilder args = new StringBuilder();
+        for (String arg : selectedArgs) {
+            args.append(arg).append(" ");
+        }
+        tfGameLaunchArgs.setText(args.toString());
     }
 
     private void reloadModDirs() {
         DefaultListModel<String> model = new DefaultListModel<>();
-        model.addAll(dbProps.modDirs.get());
+        model.addAll(dbProps.modDirsForSearch.get());
         jlModDirs.setModel(model);
         updateBtnRemoveModDir();
     }
@@ -180,11 +245,13 @@ public class SettingsDialog extends JDialog {
      * @noinspection ALL
      */
     private void $$$setupUI$$$() {
+        contentScrollPane = new JScrollPane();
         contentPane = new JPanel();
-        contentPane.setLayout(new GridLayoutManager(4, 1, new Insets(10, 10, 10, 10), -1, -1));
+        contentPane.setLayout(new GridLayoutManager(5, 1, new Insets(10, 10, 10, 10), -1, -1));
+        contentScrollPane.setViewportView(contentPane);
         final JPanel panel1 = new JPanel();
         panel1.setLayout(new GridLayoutManager(1, 2, new Insets(0, 0, 0, 0), -1, -1));
-        contentPane.add(panel1, new GridConstraints(3, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, 1, null, null, null, 0, false));
+        contentPane.add(panel1, new GridConstraints(4, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, 1, null, null, null, 0, false));
         final Spacer spacer1 = new Spacer();
         panel1.add(spacer1, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_WANT_GROW, 1, null, null, null, 0, false));
         final JPanel panel2 = new JPanel();
@@ -228,7 +295,7 @@ public class SettingsDialog extends JDialog {
         jlModDirs = new JList();
         pnlGameDirs.add(jlModDirs, new GridConstraints(1, 1, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_WANT_GROW, null, new Dimension(150, 50), null, 0, false));
         final JPanel panel4 = new JPanel();
-        panel4.setLayout(new GridLayoutManager(4, 2, new Insets(0, 0, 0, 0), -1, -1));
+        panel4.setLayout(new GridLayoutManager(4, 3, new Insets(0, 0, 0, 0), -1, -1));
         contentPane.add(panel4, new GridConstraints(1, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
         panel4.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "Game launch options", TitledBorder.DEFAULT_JUSTIFICATION, TitledBorder.DEFAULT_POSITION, null, null));
         final JLabel label3 = new JLabel();
@@ -242,58 +309,67 @@ public class SettingsDialog extends JDialog {
         final JPanel panel6 = new JPanel();
         panel6.setLayout(new GridLayoutManager(2, 4, new Insets(0, 0, 0, 0), -1, -1));
         panel4.add(panel6, new GridConstraints(2, 0, 1, 2, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
-        cbArgReview = new JCheckBox();
-        cbArgReview.setText("-review");
-        cbArgReview.setToolTipText("Starts the game in normal mode. Without it, the game may launch in a “developer” mode, giving you access to debug features like quick tactical launch and debug strategy start");
-        panel6.add(cbArgReview, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
-        cbArgNoRedScreens = new JCheckBox();
-        cbArgNoRedScreens.setText("-noRedscreens");
-        cbArgNoRedScreens.setToolTipText("Disables “red screens” – debugging tool overlays that show non-critical error messages");
-        panel6.add(cbArgNoRedScreens, new GridConstraints(0, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
-        cbArgAllowConsole = new JCheckBox();
-        cbArgAllowConsole.setText("-allowconsole");
-        cbArgAllowConsole.setToolTipText("Enables the in-game console. After this, you can open the console in-game (typically by pressing ~, or \\ / ', depending on keyboard)");
-        panel6.add(cbArgAllowConsole, new GridConstraints(0, 2, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
-        cbArgNoStartupMovies = new JCheckBox();
-        cbArgNoStartupMovies.setText("-nostartupmovies");
-        cbArgNoStartupMovies.setToolTipText("Skips the intro / startup movies, which makes the game launch faster");
-        panel6.add(cbArgNoStartupMovies, new GridConstraints(0, 3, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
-        cbArgAutoDebug = new JCheckBox();
-        cbArgAutoDebug.setText("-autoDebug");
-        cbArgAutoDebug.setToolTipText("Enables debug-related features (used for development / mod testing)");
-        panel6.add(cbArgAutoDebug, new GridConstraints(1, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         cbArgLog = new JCheckBox();
         cbArgLog.setText("-log");
         cbArgLog.setToolTipText("Opens a separate console (or window) to display the game’s Launch.log in real time. Useful for debugging / checking logs");
-        panel6.add(cbArgLog, new GridConstraints(1, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
-        cbArgNoSeekFreeLoading = new JCheckBox();
-        cbArgNoSeekFreeLoading.setText("-noSeekFreeLoading");
-        cbArgNoSeekFreeLoading.setToolTipText("Related to Unreal debugging (unreal engine specific). According to the Reddit guide, tied to the debugger");
-        panel6.add(cbArgNoSeekFreeLoading, new GridConstraints(1, 2, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        panel6.add(cbArgLog, new GridConstraints(0, 2, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        cbArgNoRedScreens = new JCheckBox();
+        cbArgNoRedScreens.setText("-noRedscreens");
+        cbArgNoRedScreens.setToolTipText("Disables “red screens” – debugging tool overlays that show non-critical error messages");
+        panel6.add(cbArgNoRedScreens, new GridConstraints(0, 3, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        cbArgNoStartupMovies = new JCheckBox();
+        cbArgNoStartupMovies.setText("-nostartupmovies");
+        cbArgNoStartupMovies.setToolTipText("Skips the intro / startup movies, which makes the game launch faster");
+        panel6.add(cbArgNoStartupMovies, new GridConstraints(1, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         cbArgRegenerateinis = new JCheckBox();
         cbArgRegenerateinis.setText("-regenerateinis");
         cbArgRegenerateinis.setToolTipText("Regenerates your user config .ini files on game start, effectively wiping your config folder and creating fresh ones. Useful for troubleshooting, especially with mods");
-        panel6.add(cbArgRegenerateinis, new GridConstraints(1, 3, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        panel6.add(cbArgRegenerateinis, new GridConstraints(1, 2, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        cbArgReview = new JCheckBox();
+        cbArgReview.setText("-review");
+        cbArgReview.setToolTipText("Starts the game in normal mode. Without it, the game may launch in a “developer” mode, giving you access to debug features like quick tactical launch and debug strategy start");
+        panel6.add(cbArgReview, new GridConstraints(1, 3, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        cbArgNoSeekFreeLoading = new JCheckBox();
+        cbArgNoSeekFreeLoading.setText("-noSeekFreeLoading");
+        cbArgNoSeekFreeLoading.setToolTipText("Related to Unreal debugging (unreal engine specific). According to the Reddit guide, tied to the debugger");
+        panel6.add(cbArgNoSeekFreeLoading, new GridConstraints(1, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        cbArgAllowConsole = new JCheckBox();
+        cbArgAllowConsole.setText("-allowconsole");
+        cbArgAllowConsole.setToolTipText("Enables the in-game console. After this, you can open the console in-game (typically by pressing ~, or \\ / ', depending on keyboard)");
+        panel6.add(cbArgAllowConsole, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        cbArgAutoDebug = new JCheckBox();
+        cbArgAutoDebug.setText("-autoDebug");
+        cbArgAutoDebug.setToolTipText("Enables debug-related features (used for development / mod testing)");
+        panel6.add(cbArgAutoDebug, new GridConstraints(0, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         final Spacer spacer3 = new Spacer();
         panel4.add(spacer3, new GridConstraints(3, 1, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_VERTICAL, 1, GridConstraints.SIZEPOLICY_WANT_GROW, null, null, null, 0, false));
         final JPanel panel7 = new JPanel();
-        panel7.setLayout(new GridLayoutManager(2, 2, new Insets(0, 0, 0, 0), -1, -1));
-        contentPane.add(panel7, new GridConstraints(2, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
-        panel7.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "GUI", TitledBorder.DEFAULT_JUSTIFICATION, TitledBorder.DEFAULT_POSITION, null, null));
+        panel7.setLayout(new GridLayoutManager(3, 2, new Insets(0, 0, 0, 0), -1, -1));
+        contentPane.add(panel7, new GridConstraints(3, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
+        panel7.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "General", TitledBorder.DEFAULT_JUSTIFICATION, TitledBorder.DEFAULT_POSITION, null, null));
         final JLabel label4 = new JLabel();
         label4.setText("GUI skin");
         panel7.add(label4, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         final Spacer spacer4 = new Spacer();
-        panel7.add(spacer4, new GridConstraints(1, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_VERTICAL, 1, GridConstraints.SIZEPOLICY_WANT_GROW, null, null, null, 0, false));
+        panel7.add(spacer4, new GridConstraints(2, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_VERTICAL, 1, GridConstraints.SIZEPOLICY_WANT_GROW, null, null, null, 0, false));
         cbGuiSkins = new JComboBox();
         panel7.add(cbGuiSkins, new GridConstraints(0, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        final JPanel panel8 = new JPanel();
+        panel8.setLayout(new GridLayoutManager(1, 2, new Insets(0, 0, 0, 0), -1, -1));
+        panel7.add(panel8, new GridConstraints(1, 0, 1, 2, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
+        cbExitOnGameLaunch = new JCheckBox();
+        cbExitOnGameLaunch.setText("Exit after starting XCOM 2");
+        cbExitOnGameLaunch.setToolTipText("Exit after starting XCOM 2 to free RAM memory resources");
+        panel8.add(cbExitOnGameLaunch, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        final Spacer spacer5 = new Spacer();
+        panel8.add(spacer5, new GridConstraints(0, 1, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_WANT_GROW, 1, null, null, null, 0, false));
     }
 
     /**
      * @noinspection ALL
      */
     public JComponent $$$getRootComponent$$$() {
-        return contentPane;
+        return contentScrollPane;
     }
 
 }
