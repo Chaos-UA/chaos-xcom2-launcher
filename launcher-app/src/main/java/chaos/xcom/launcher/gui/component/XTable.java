@@ -9,6 +9,7 @@ import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableColumn;
 import javax.swing.table.TableModel;
+import java.awt.*;
 import java.awt.event.MouseEvent;
 import java.util.List;
 
@@ -21,7 +22,10 @@ public class XTable extends JXTable {
     public XTable(TableModel tableModel) {
         super(tableModel);
         setColumnControlVisible(true);   // Allow user to hide/show columns via a control button
-        setRowHeight(22);   // Better row height
+        //setRowHeight(22);   // Better row height
+        setShowHorizontalLines(true);
+        setShowVerticalLines(true);
+        setIntercellSpacing(new Dimension(0, 1));
 
         // Enable sorting
         setAutoCreateRowSorter(true);

@@ -15,6 +15,7 @@ public class ModDeclaredRunOrdersTable extends XTable {
 
     public ModDeclaredRunOrdersTable() {
         this.model = new ModDeclaredRunOrdersModel();
+        setSortable(false);
         setMod(null);
         model.apply(this);
     }
@@ -22,6 +23,7 @@ public class ModDeclaredRunOrdersTable extends XTable {
     public void setMod(Mod mod) {
         model.setMod(mod);
         model.apply(this);
+        packAll();
     }
 
     @Data
@@ -42,8 +44,7 @@ public class ModDeclaredRunOrdersTable extends XTable {
             return new TableColumn[]{
                     new TableColumn<>("Mod ID", String.class, ModRunOrderTableRow::getModId),
                     new TableColumn<>("Run Order", String.class, ModRunOrderTableRow::getRunOrderType),
-                    new TableColumn<>("Target Mod ID", String.class, ModRunOrderTableRow::getTargetModId),
-                    new TableColumn<>("Active", Boolean.class, ModRunOrderTableRow::getActive)
+                    new TableColumn<>("Target Mod ID", String.class, ModRunOrderTableRow::getTargetModId)
             };
         }
 

@@ -3,26 +3,42 @@ package chaos.xcom.launcher.gui.MainForm;
 import chaos.xcom.launcher.exception.InternalException;
 import chaos.xcom.launcher.gui.component.XTable;
 import chaos.xcom.launcher.gui.component.event.XMouseAdapter;
+import chaos.xcom.launcher.mod.ModService;
 import chaos.xcom.launcher.mod.dto.Mod;
 import chaos.xcom.launcher.util.ColorConstant;
+import jakarta.enterprise.inject.spi.CDI;
 import org.apache.commons.lang3.StringUtils;
 import org.jdesktop.swingx.decorator.AbstractHighlighter;
 import org.jdesktop.swingx.decorator.ColorHighlighter;
 import org.jdesktop.swingx.decorator.ComponentAdapter;
 
 import javax.swing.*;
-import javax.swing.table.TableCellRenderer;
 import java.awt.*;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.List;
 
 public class ModTable extends XTable {
 
     public ModTable() {
         super(new ModTableModel(List.of()));
+        this.setModel(new ModTableModel(List.of()));
+
+        this.addHighlighter(new AbstractHighlighter() {
+            @Override
+            protected Component doHighlight(Component component, ComponentAdapter adapter) {
+                Mod row = getModel().getModByRawIndex(convertRowIndexToModel(adapter.row));
+
+                if (!row.isActive()) {
+                    //component.setBackground(ColorConstant.getTableBackgroundColor());
+                    component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
+                }
+
+                return component;
+            }
+        });
+
         addMouseListener(new XMouseAdapter() {
 
             @Override
@@ -74,7 +90,8 @@ public class ModTable extends XTable {
         addHighlighter(new ColorHighlighter(
                 (renderer, adapter) -> {
                     // 4. Decide whether to highlight
-                    return adapter.row == 5;
+                    Mod mod = getModel().getModByRawIndex(convertRowIndexToModel(adapter.row));
+                    return mod.isActive() && !mod.getStatuses().contains(Mod.Status.OK);
                 },
                 ColorConstant.MISSING_DEPENDENCY_MOD.getColor(),
                 Color.WHITE
@@ -100,8 +117,24 @@ public class ModTable extends XTable {
     public Mod getSelectedMod() {
         int row = getSelectedRow();
         if (row != -1) {
-            return getModel().getMod(convertRowIndexToModel(row));
+            return getModel().getModByRawIndex(convertRowIndexToModel(row));
         }
         return null;
+    }
+
+    public void setModFilter(String modFilter) {
+        getModel().setModFilter(modFilter);
+    }
+
+    public void setMods(List<Mod> parsedMods) {
+        List<Mod> modsBefore = getModel().getMods();
+        getModel().setMods(parsedMods);
+        if (modsBefore.isEmpty()) {
+            packAll(); // pack once after mods not empty
+        }
+    }
+
+    ModService getModService() {
+        return CDI.current().select(ModService.class).get();
     }
 }

@@ -1,5 +1,6 @@
 package chaos.xcom.launcher.mod;
 
+import chaos.db.gen.tables.records.ModRecord;
 import chaos.xcom.launcher.db.property.DbProperties;
 import chaos.xcom.launcher.gui.MainForm.MainForm;
 import chaos.xcom.launcher.highlander.CommunityHighlanderUtils;
@@ -20,7 +21,6 @@ import chaos.xcom.launcher.util.XComModFinderUtils;
 import jakarta.inject.Singleton;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.configuration2.INIConfiguration;
 
 import java.io.File;
@@ -35,20 +35,53 @@ public class ModService {
 
     private final DbProperties dbProps;
     private final MainForm mainForm;
+    private final ModRepository modRepository;
+
     /**
      * String is mod ID, and values are mods under this ID, multiple values in case of duplicates.
      */
-    private Map<String, List<Mod>> modsMap = new HashMap<>();
+   // private Map<String, List<Mod>> modsMap = new HashMap<>();
+
+    private LinkedHashMap<String, Mod> allMods = new LinkedHashMap<>();
+
+    public void setModActive(String modId, boolean active) {
+        Mod mod = allMods.get(modId);
+        if (mod == null) {
+            log.warn("Mod with ID {} not found", modId);
+        } else {
+            mod.setActive(active);
+            log.info("Mod with ID {} is now {}", modId, active ? "active" : "inactive");
+            saveModToDb(mod);
+        }
+        recalculateModDependencies();
+    }
+
+    private void saveModToDb(Mod mod) {
+        ModRecord modDbRecord = toDbModRecord(mod);
+        modRepository.save(modDbRecord);
+        log.info("Saved mod {} to DB", mod.getId());
+    }
+
+    public void saveAllModsToDb() {
+        List<ModRecord> modRecords = allMods.values().stream().map(this::toDbModRecord).toList();
+        modRepository.save(modRecords);
+        log.info("Saved {} mods to DB", allMods.size());
+    }
+
+    private ModRecord toDbModRecord(Mod mod) {
+        ModRecord modDbRecord = new ModRecord();
+        modDbRecord.setId(mod.getId());
+        modDbRecord.setTitle(mod.getTitle());
+        modDbRecord.setActive(mod.isActive());
+        modDbRecord.setPublishedFileId(mod.getPublishedFileId());
+        return modDbRecord;
+    }
 
     public Optional<Mod> findModById(String modId) {
         if (modId == null) {
             return Optional.empty();
         }
-        List<Mod> mods = modsMap.get(modId);
-        if (CollectionUtils.isEmpty(mods)) {
-            return Optional.empty();
-        }
-        return Optional.of(mods.getFirst());
+        return Optional.ofNullable(allMods.get(modId));
     }
 
     /**
@@ -59,12 +92,85 @@ public class ModService {
         for (Mod mod : mods) {
             for (HighlanderModConfig config : mod.getHighlanderModsConfig().getModConfigs().values()) {
                 for (String ignoreRequiredMod : config.getIgnoreRequiredMods()) {
-                    result.computeIfAbsent(config.getMod(), k -> new LinkedHashSet<>()).add(ignoreRequiredMod);
+                    result.computeIfAbsent(ignoreRequiredMod, k -> new LinkedHashSet<>()).add(config.getMod());
                 }
             }
         }
         return result;
     }
+
+    void recalculateModDependencies() {
+        // clear all dependencies state
+        for (Mod mod : allMods.values()) {
+            mod.clearStateForLoadOrderCalculation();
+        }
+        List<Mod> activeMods = new ArrayList<>();
+        List<Mod> inactiveMods = new ArrayList<>();
+        for (Mod mod : allMods.values()) {
+            if (mod.isActive()) {
+                activeMods.add(mod);
+            } else {
+                inactiveMods.add(mod);
+            }
+        }
+
+        LinkedHashMap<String, Mod> loadOrderSortedMods = toLinkedHashMap(sortModsForLoadOrder(activeMods));
+        for (Mod inactiveMod : inactiveMods) {
+            loadOrderSortedMods.put(inactiveMod.getId(), inactiveMod);
+        }
+
+        this.allMods = loadOrderSortedMods;
+        recalculateModsStatuses();
+
+        // expand duplicate mods to show in table
+        ArrayList<Mod> tableMods = new ArrayList<>(loadOrderSortedMods.size());
+        for (Mod mod : allMods.values()) {
+            tableMods.add(mod);
+            for (Mod duplicateMod : mod.getDuplicateMods()) {
+                duplicateMod.setActive(mod.isActive());
+                tableMods.add(duplicateMod);
+            }
+        }
+
+        mainForm.updateMods(new ArrayList<>(loadOrderSortedMods.values()));
+    }
+
+    void recalculateModsStatuses() {
+        for (Mod mod : allMods.values()) {
+            recalculateModStatus(mod);
+        }
+    }
+
+    void recalculateModStatus(Mod mod) {
+        TreeSet<Mod.Status> modStatuses = new TreeSet<>();
+
+        if (!mod.isActive()) {
+            modStatuses.add(Mod.Status.INACTIVE);
+        }
+        if (!mod.isExist()) {
+            modStatuses.add(Mod.Status.DELETED);
+        }
+
+        for (ModDependency modDependency : mod.getDependencies()) {
+            if (!Objects.equals(modDependency.getMod(), mod.getId())) {
+                continue;
+            }
+            Mod targetMod = allMods.get(modDependency.getTargetMod());
+            if (modDependency.getDependencyType() == Mod.DependencyType.REQUIRED
+                    && (targetMod == null || !targetMod.isActive())) {
+                modStatuses.add(Mod.Status.REQUIRE_DEPENDENCY);
+            } else if (modDependency.getDependencyType() == Mod.DependencyType.INCOMPATIBLE
+                    && targetMod != null && targetMod.isActive()) {
+                modStatuses.add(Mod.Status.INCOMPATIBLE_DEPENDENCY);
+            }
+        }
+
+        if (modStatuses.isEmpty()) {
+            modStatuses.add(Mod.Status.OK);
+        }
+        mod.setStatuses(modStatuses);
+    }
+
 
     List<Mod> sortModsForLoadOrder(List<Mod> mods) {
         mods = new ArrayList<>(mods);
@@ -121,12 +227,15 @@ public class ModService {
 
                         LinkedHashSet<String> requiredModIgnoredByMods = requiredModIgnoredByAlternativeModsMap.getOrDefault(requiredMod, new LinkedHashSet<>());
                         for (String requiredModIgnoredByMod : requiredModIgnoredByMods) {
-                            loadOrderDeclaration = new ModLoadOrderDeclaration();
-                            loadOrderDeclaration.setMod(mod.getId());
-                            loadOrderDeclaration.setDeclaredInMod(laterMod.getId());
-                            loadOrderDeclaration.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
-                            loadOrderDeclaration.setTargetMod(requiredModIgnoredByMod);
-                            mod.addLoadOrderDeclaration(loadOrderDeclaration);
+                            if (loadOrderDeclaration.getOverriddenByMod() == null) {
+                                loadOrderDeclaration.setOverriddenByMod(requiredModIgnoredByMod);
+                            }
+                            ModLoadOrderDeclaration loadOrder2 = new ModLoadOrderDeclaration();
+                            loadOrder2.setMod(mod.getId());
+                            loadOrder2.setDeclaredInMod(laterMod.getId());
+                            loadOrder2.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
+                            loadOrder2.setTargetMod(requiredModIgnoredByMod);
+                            mod.addLoadOrderDeclaration(loadOrder2);
                         }
                     }
                     for (RunOrderDeclaration runOrder : modConfig.getRunOrderDeclarations()) {
@@ -161,10 +270,11 @@ public class ModService {
         mods = sortModsAfterRootSort(toLinkedHashMap(mods), true);
 
 
-        return fillModsFieldsAfterLoadOrderSort(mods);
+        return fillModsFieldsAfterLoadOrderSort(requiredModIgnoredByAlternativeModsMap, mods);
     }
 
-    List<Mod> fillModsFieldsAfterLoadOrderSort(List<Mod> mods) {
+    List<Mod> fillModsFieldsAfterLoadOrderSort(Map<String, LinkedHashSet<String>> requiredModIgnoredByAlternativeModsMap,
+                                               List<Mod> mods) {
         // now set load order field on final mods loaded order
         for (int i = 0; i < mods.size(); i++) {
             mods.get(i).setLoadOrder(i + 1);
@@ -198,14 +308,6 @@ public class ModService {
                 if (mod == null) {
                     continue;
                 }
-                for (String requiredMod : modConfig.getRequiredMods()) {
-                    ModDependency dependency = new ModDependency();
-                    dependency.setMod(mod.getId());
-                    dependency.setDeclaredInMod(declaredInMod.getId());
-                    dependency.setTargetMod(requiredMod);
-                    dependency.setDependencyType(Mod.DependencyType.REQUIRED);
-                    mod.getDependencies().add(dependency);
-                }
 
                 for (String ignoreRequiredMod : modConfig.getIgnoreRequiredMods()) {
                     ModDependency dependency = new ModDependency();
@@ -213,7 +315,31 @@ public class ModService {
                     dependency.setDeclaredInMod(declaredInMod.getId());
                     dependency.setTargetMod(ignoreRequiredMod);
                     dependency.setDependencyType(Mod.DependencyType.IGNORE_REQUIRED);
-                    mod.getDependencies().add(dependency);
+                    mod.addDependency(dependency);
+                }
+
+                for (String requiredMod : modConfig.getRequiredMods()) {
+                    ModDependency dependency = new ModDependency();
+                    dependency.setMod(mod.getId());
+                    dependency.setDeclaredInMod(declaredInMod.getId());
+                    dependency.setTargetMod(requiredMod);
+                    dependency.setDependencyType(Mod.DependencyType.REQUIRED);
+                    mod.addDependency(dependency);
+
+                    Collection<String> modsIgnoredRequiredMod = requiredModIgnoredByAlternativeModsMap.get(requiredMod);
+                    if (modsIgnoredRequiredMod != null) {
+                        for (String modIgnoredRequiredMod : modsIgnoredRequiredMod) {
+                            if (dependency.getOverriddenByMod() == null) {
+                                dependency.setOverriddenByMod(modIgnoredRequiredMod);
+                            }
+                            ModDependency dep2 = new ModDependency();
+                            dep2.setMod(mod.getId());
+                            dep2.setDeclaredInMod(modIgnoredRequiredMod); // todo not correct, but not really needed and can be fixed later
+                            dep2.setTargetMod(modIgnoredRequiredMod);
+                            dep2.setDependencyType(Mod.DependencyType.REQUIRED);
+                            mod.addDependency(dep2);
+                        }
+                    }
                 }
 
                 for (String incompatibleMod : modConfig.getIncompatibleMods()) {
@@ -222,48 +348,25 @@ public class ModService {
                     dependency.setDeclaredInMod(declaredInMod.getId());
                     dependency.setTargetMod(incompatibleMod);
                     dependency.setDependencyType(Mod.DependencyType.INCOMPATIBLE);
-                    mod.getDependencies().add(dependency);
+                    mod.addDependency(dependency);
                 }
             }
         }
 
-        // fill incoming dependencies
-        for (Mod declaredInMod : mods) {
-            for (HighlanderModConfig modConfig : declaredInMod.getHighlanderModsConfig().getModConfigs().values()) {
-                String referencingMod = modConfig.getMod();
-                for (String requiredMod : modConfig.getRequiredMods()) {
-                    Mod targetMod = modsMap.get(requiredMod);
+        for (Mod mod : mods) {
+            for (ModDependency modDependency : mod.getDependencies()) {
+                if (!modDependency.getTargetMod().equals(mod.getId())) {
+                    Mod targetMod = modsMap.get(modDependency.getTargetMod());
                     if (targetMod != null) {
-                        ModDependency dependency = new ModDependency();
-                        dependency.setMod(referencingMod);
-                        dependency.setDeclaredInMod(declaredInMod.getId());
-                        dependency.setTargetMod(requiredMod);
-                        dependency.setDependencyType(Mod.DependencyType.REQUIRED);
-                        targetMod.getDependencies().add(dependency);
+                        targetMod.addDependency(modDependency);
                     }
                 }
-
-                for (String ignoreRequiredMod : modConfig.getIgnoreRequiredMods()) {
-                    Mod targetMod = modsMap.get(ignoreRequiredMod);
+                if (!modDependency.getMod().equals(mod.getId())) { // never happen?
+                    Mod targetMod = modsMap.get(modDependency.getMod());
                     if (targetMod != null) {
-                        ModDependency dependency = new ModDependency();
-                        dependency.setMod(referencingMod);
-                        dependency.setDeclaredInMod(declaredInMod.getId());
-                        dependency.setTargetMod(ignoreRequiredMod);
-                        dependency.setDependencyType(Mod.DependencyType.IGNORE_REQUIRED);
-                        targetMod.getDependencies().add(dependency);
-                    }
-                }
-
-                for (String incompatibleMod : modConfig.getIncompatibleMods()) {
-                    Mod targetMod = modsMap.get(incompatibleMod);
-                    if (targetMod != null) {
-                        ModDependency dependency = new ModDependency();
-                        dependency.setMod(referencingMod);
-                        dependency.setDeclaredInMod(declaredInMod.getId());
-                        dependency.setTargetMod(incompatibleMod);
-                        dependency.setDependencyType(Mod.DependencyType.INCOMPATIBLE);
-                        targetMod.getDependencies().add(dependency);
+                        if (!targetMod.getDependencies().contains(modDependency)) {
+                            targetMod.addDependency(modDependency);
+                        }
                     }
                 }
             }
@@ -354,19 +457,39 @@ public class ModService {
         return sortResult.getSorted().stream().map(mods::get).collect(Collectors.toList());
     }
 
-    void setModsMap(List<Mod> mods) {
-        HashMap<String, List<Mod>> map = new HashMap<>();
+    void setModsMapAfterLoading(List<Mod> mods) {
+        LinkedHashMap<String, Mod> map = new LinkedHashMap<>();
         for (Mod mod : mods) {
-            map.computeIfAbsent(mod.getId(), (k) -> new ArrayList<>()).add(mod);
+            Mod mod2 = map.computeIfAbsent(mod.getId(), (k) -> mod);
+            if (mod != mod2) { // duplicate detected
+                mod.getDuplicateMods().add(mod2);
+            }
         }
-        List<Mod> loadOrderSortedMods = sortModsForLoadOrder(mods);
-        mainForm.updateMods(loadOrderSortedMods);
+
+        List<ModRecord> modDbRecords = modRepository.findAll();
+        for (ModRecord modDbRecord : modDbRecords) {
+            Mod mod = map.get(modDbRecord.getId());
+            if (mod == null) {
+                mod = new Mod();
+                mod.setId(modDbRecord.getId());
+                mod.setTitle(modDbRecord.getTitle());
+                mod.setPublishedFileId(modDbRecord.getPublishedFileId());
+                mod.setExist(false);
+            } else {
+                mod.setExist(true);
+            }
+            mod.setActive(modDbRecord.getActive());
+        }
+
+        allMods = map;
+        recalculateModDependencies();
     }
 
     public void reloadModsFromDirs() {
         List<File> modDirs = searchModsInDirs();
         List<Mod> parsedMods = parseMods(modDirs);
-        setModsMap(parsedMods);
+
+        setModsMapAfterLoading(parsedMods);
     }
 
     public List<File> searchModsInDirs() {
@@ -374,7 +497,6 @@ public class ModService {
         for (String modDir : dbProps.modDirsForSearch.get()) {
             modDirs.addAll(reloadModsFromDir(new File(modDir)));
         }
-
         return modDirs;
     }
 
@@ -437,5 +559,12 @@ public class ModService {
     }
 
 
+    public Collection<Mod> getActiveMods() {
+        return allMods.values().stream().filter(Mod::isActive).toList();
+    }
 
+    public boolean isModActive(String modId) {
+        Mod mod = allMods.get(modId);
+        return mod != null && mod.isActive();
+    }
 }

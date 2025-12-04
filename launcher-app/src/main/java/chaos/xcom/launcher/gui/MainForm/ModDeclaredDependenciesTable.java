@@ -15,6 +15,7 @@ public class ModDeclaredDependenciesTable extends XTable {
 
     public ModDeclaredDependenciesTable() {
         this.model = new ModDependenciesTableModel();
+        setSortable(false);
         model.apply(this);
         setMod(null);
     }
@@ -22,6 +23,7 @@ public class ModDeclaredDependenciesTable extends XTable {
     public void setMod(Mod mod) {
         model.setMod(mod);
         model.apply(this);
+        packAll();
     }
 
     @Data
@@ -42,8 +44,7 @@ public class ModDeclaredDependenciesTable extends XTable {
             return new TableColumn[]{
                     new TableColumn<>("Mod ID", String.class, ModDependencyTableRow::getModId),
                     new TableColumn<>("Dependency", String.class, ModDependencyTableRow::getDependencyType),
-                    new TableColumn<>("Target Mod ID", String.class, ModDependencyTableRow::getTargetModId),
-                    new TableColumn<>("Active", Boolean.class, ModDependencyTableRow::getActive)
+                    new TableColumn<>("Target Mod ID", String.class, ModDependencyTableRow::getTargetModId)
             };
         }
 
