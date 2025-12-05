@@ -1,5 +1,6 @@
 package chaos.xcom.launcher.db.property;
 
+import chaos.xcom.launcher.service.SwingComponentStates;
 import chaos.xcom.launcher.util.FileUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.formdev.flatlaf.FlatIntelliJLaf;
@@ -21,7 +22,9 @@ public class DbProperties extends AbstractProperties {
     public final StringProperty guiSkin = requiredStringProp("guiSkin", FlatIntelliJLaf.class.getName(), "GUI skin");
     public final ListProperty<String> gameLaunchArgs = listProp("gameLaunchArgs", new TypeReference<>() {}, List.of(), "XCOM launch arguments");
     public final BooleanProperty exitOnGameLaunch = booleanProp("exitOnGameLaunch", true, "Exit on XCOM game launch to free RAM memory resources");
-
+    public final JsonProperty<SwingComponentStates> swingComponentStates = jsonProp("swingComponentStates",
+            new TypeReference<>() {}, new SwingComponentStates(),
+            "Swing components states. Windows positions, sizes, etc.");
 
     public DbProperties(Instance<PropertyService> propertyService) {
         super(propertyService);

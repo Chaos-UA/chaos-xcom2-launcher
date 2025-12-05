@@ -396,17 +396,6 @@ public abstract class AbstractProperties {
         }
     }
 
-    public static class FarmFeaturesProperty extends StringProperty {
-
-        protected FarmFeaturesProperty(String key, Instance<PropertyService> propertyService) {
-            super(key, "", null, propertyService);
-        }
-
-        public boolean hasSmartMilkingFeature() {
-            return get().contains("SmartMilking");
-        }
-    }
-
     public static class EnumProperty<T extends Enum<T>> extends PropertyConfig<T> {
 
         private final Class<T> enumClass;
