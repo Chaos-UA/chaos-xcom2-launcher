@@ -5,6 +5,7 @@ import chaos.xcom.launcher.gui.component.XTable;
 import chaos.xcom.launcher.mod.ModService;
 import chaos.xcom.launcher.mod.dto.Mod;
 import chaos.xcom.launcher.util.ComparatorUtils;
+import chaos.xcom.launcher.util.DateUtils;
 import chaos.xcom.launcher.util.FileUtils;
 import jakarta.enterprise.inject.spi.CDI;
 import lombok.Getter;
@@ -60,7 +61,15 @@ public class ModTableModel extends AbstractTableModel {
                     return forWotc ? "Yes" : "No";
                 }
             }),
-            new TableColumn<>("Steam ID", String.class, Mod::getPublishedFileId),
+            new TableColumn<>("Steam ID", String.class, (Mod v) -> v.getSteamMod().getSteamModId()),
+            new TableColumn<>("Steam sync at", String.class, (Mod v) -> {
+                if (v.getSteamMod().getUpdatedAt() == null) {
+                    return "?";
+                } else {
+                    return DateUtils.format(v.getSteamMod().getUpdatedAt());
+                }
+            }),
+            new TableColumn<>("Published File ID", String.class, Mod::getPublishedFileId),
             new TableColumn<>("Size", Long.class, Mod::getSize, FileUtils::formatSizeAsMb)
     };
 

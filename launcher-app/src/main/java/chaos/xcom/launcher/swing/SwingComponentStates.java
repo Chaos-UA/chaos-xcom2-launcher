@@ -1,8 +1,7 @@
-package chaos.xcom.launcher.service;
+package chaos.xcom.launcher.swing;
 
 import lombok.Data;
 
-import java.awt.*;
 import java.util.HashMap;
 import java.util.Map;
 

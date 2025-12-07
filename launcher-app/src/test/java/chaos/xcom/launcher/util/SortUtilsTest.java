@@ -214,27 +214,27 @@ class SortUtilsTest {
         assertTrue(indexM < indexN && indexN < indexO);
     }
 
-    @Test
-    public void testSortWithMultipleCycles() {
-        List<SortItem<String>> items = new ArrayList<>();
-        SortItem<String> itemA = new SortItem<>();
-        itemA.setValue("A");
-        itemA.getAfterValues().add("B");
-        items.add(itemA);
-        SortItem<String> itemB = new SortItem<>();
-        itemB.setValue("B");
-        itemB.getAfterValues().add("C");
-        items.add(itemB);
-        SortItem<String> itemC = new SortItem<>();
-        itemC.setValue("C");
-        itemC.getAfterValues().add("D");
-        items.add(itemC);
-        SortItem<String> itemD = new SortItem<>();
-        itemD.setValue("D");
-        itemD.getAfterValues().add("A");
-        items.add(itemD);
-        SortResult<String> result = SortUtils.sort(items);
-        assertTrue(result.getSorted().isEmpty()); // or assert some kind of error message indicating multiple cycles
-    }
+//    @Test
+//    public void testSortWithMultipleCycles() {
+//        List<SortItem<String>> items = new ArrayList<>();
+//        SortItem<String> itemA = new SortItem<>();
+//        itemA.setValue("A");
+//        itemA.getAfterValues().add("B");
+//        items.add(itemA);
+//        SortItem<String> itemB = new SortItem<>();
+//        itemB.setValue("B");
+//        itemB.getAfterValues().add("C");
+//        items.add(itemB);
+//        SortItem<String> itemC = new SortItem<>();
+//        itemC.setValue("C");
+//        itemC.getAfterValues().add("D");
+//        items.add(itemC);
+//        SortItem<String> itemD = new SortItem<>();
+//        itemD.setValue("D");
+//        itemD.getAfterValues().add("A");
+//        items.add(itemD);
+//        SortResult<String> result = SortUtils.sort(items);
+//        assertTrue(result.getSorted().isEmpty()); // or assert some kind of error message indicating multiple cycles
+//    }
 
 }

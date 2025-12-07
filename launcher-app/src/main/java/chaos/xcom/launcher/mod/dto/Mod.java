@@ -1,46 +1,104 @@
 package chaos.xcom.launcher.mod.dto;
 
+import chaos.xcom.launcher.highlander.dto.HighlanderModConfig;
 import chaos.xcom.launcher.highlander.dto.HighlanderModsConfig;
 import chaos.xcom.launcher.highlander.dto.HighlanderRunPriorityGroup;
+import chaos.xcom.launcher.steam.SteamMod;
+import lombok.AccessLevel;
 import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.io.File;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
-@Data
+@Getter
+@Setter
 public class Mod {
     public static final int MOD_ORDER_DISABLED = Integer.MAX_VALUE;
 
     private String id;
     private String title;
-    private String description;
+    private String xcomModFileContent;
     private boolean requiresXPACK;
     private String publishedFileId;
+    private SteamMod steamMod = new SteamMod();
     private boolean active;
-    private boolean exist;
-    private String author;
-    private Instant updatedAt;
-    private Instant createdAt;
-    private String tags;
+
+    @Getter(AccessLevel.NONE) @Setter(AccessLevel.NONE)
+    private Boolean exist;
     private long size;
     private File directory;
     private Set<Mod.Status> statuses;
-    //private ModLoadOrderGroup loadOrderGroup;
-    //private Set<String> runAfterMods = new HashSet<>();
-    //private Set<String> runBeforeMods = new HashSet<>();
-    //private Set<String> requiredMods = new HashSet<>();
     /**
      * Order at which to load mods on game start.
      * To guaranty order, special symbolic links will be created with names alphabetically sorted, that game recognize.
      */
     private int loadOrder;
-    private HighlanderModsConfig highlanderModsConfig;
-    private List<Mod> cycleMods = new ArrayList<>();
+    private HighlanderModsConfig highlanderModsConfig = new HighlanderModsConfig();
+
+    /**
+     * TODO
+     */
+    private List<ModDependency> declaredDependencies = new ArrayList<>();
+    /**
+     * TODO
+     */
+    private List<ModLoadOrderDeclaration> declaredLoadOrders = new ArrayList<>();
+
+    private List<List<Mod>> cycleMods = new ArrayList<>();
     private List<ModDependency> dependencies = new ArrayList<>();
     private List<ModLoadOrderGroupDeclaration> loadOrderGroups = new ArrayList<>();
     private List<ModLoadOrderDeclaration> loadOrders = new ArrayList<>();
+
+    public List<ModDeclaredDependency> getDeclaredDependencies() {
+        ArrayList<ModDeclaredDependency> result = new ArrayList<>();
+
+        // todo user declarations
+
+        for (String requiredSteamModId : steamMod.getRequiredSteamMods().stream().map(SteamMod.SteamRequiredMod::getSteamModId).toList()) {
+            ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
+            declaredDependency.setMod(this.getId());
+            declaredDependency.setTargetMod(requiredSteamModId);
+            declaredDependency.setDependencyType(DependencyType.REQUIRED);
+            declaredDependency.setDeclaredInMod(this.getId());
+            declaredDependency.setSource(DeclarationSource.STEAM);
+            result.add(declaredDependency);
+        }
+
+        HighlanderModConfig highlanderModConfig = highlanderModsConfig.getModConfigs().get(this.getId());
+        for (String requiredModId : highlanderModConfig.getRequiredMods()) {
+            ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
+            declaredDependency.setMod(this.getId());
+            declaredDependency.setTargetMod(requiredModId);
+            declaredDependency.setDependencyType(DependencyType.REQUIRED);
+            declaredDependency.setDeclaredInMod(this.getId());
+            declaredDependency.setSource(DeclarationSource.HIGHLANDER);
+            result.add(declaredDependency);
+        }
+        for (String incompatibleModId : highlanderModConfig.getIncompatibleMods()) {
+            ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
+            declaredDependency.setMod(this.getId());
+            declaredDependency.setTargetMod(incompatibleModId);
+            declaredDependency.setDependencyType(DependencyType.INCOMPATIBLE);
+            declaredDependency.setDeclaredInMod(this.getId());
+            declaredDependency.setSource(DeclarationSource.HIGHLANDER);
+            result.add(declaredDependency);
+        }
+        for (String ignoredRequiredModId : highlanderModConfig.getIgnoreRequiredMods()) {
+            ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
+            declaredDependency.setMod(this.getId());
+            declaredDependency.setTargetMod(ignoredRequiredModId);
+            declaredDependency.setDependencyType(DependencyType.IGNORE_REQUIRED);
+            declaredDependency.setDeclaredInMod(this.getId());
+            declaredDependency.setSource(DeclarationSource.HIGHLANDER);
+            result.add(declaredDependency);
+        }
+
+        return result;
+    }
 
     public void addLoadOrderGroupDeclaration(ModLoadOrderGroupDeclaration loadOrderGroupDeclaration) {
         for (ModLoadOrderGroupDeclaration prevLoadOrder : loadOrderGroups) {
@@ -63,11 +121,19 @@ public class Mod {
     }
 
     public void clearStateForLoadOrderCalculation() {
+        exist = null;
         loadOrder = MOD_ORDER_DISABLED;
         cycleMods = new ArrayList<>();
         dependencies = new ArrayList<>();
         loadOrders = new ArrayList<>();
         loadOrderGroups = new ArrayList<>();
+    }
+
+    public boolean isExist() {
+        if (exist == null) {
+            exist = directory != null && directory.exists() && directory.isDirectory();
+        }
+        return exist;
     }
 
     /**
@@ -114,6 +180,16 @@ public class Mod {
         private String targetMod;
         private String declaredInMod;
         private String overriddenByMod;
+        private boolean hasError;
+    }
+
+    @Data
+    public static class ModDeclaredDependency {
+        private String mod;
+        private DependencyType dependencyType;
+        private String targetMod;
+        private String declaredInMod;
+        private DeclarationSource source;
     }
 
     public static enum DependencyType {
@@ -127,7 +203,8 @@ public class Mod {
         INACTIVE,
         DELETED,
         REQUIRE_DEPENDENCY,
-        INCOMPATIBLE_DEPENDENCY
+        INCOMPATIBLE_DEPENDENCY,
+        CYCLIC_DEPENDENCY
     }
 
 }

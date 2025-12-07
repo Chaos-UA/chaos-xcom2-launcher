@@ -1,6 +1,6 @@
 package chaos.xcom.launcher.db.property;
 
-import chaos.xcom.launcher.service.SwingComponentStates;
+import chaos.xcom.launcher.swing.SwingComponentStates;
 import chaos.xcom.launcher.util.FileUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.formdev.flatlaf.FlatIntelliJLaf;
@@ -13,7 +13,7 @@ import java.util.List;
 @Singleton
 public class DbProperties extends AbstractProperties {
 
-    public final OptionalStringProperty gameDir = optionalStringProp("gameDir", "Game directory");
+    public final OptionalStringProperty gameExe = optionalStringProp("gameDir", "Game directory");
     public final StringProperty userGameConfigDir = requiredStringProp("userGameConfigDir",
             FileUtils.getDefaultXCom2UserDir().getAbsolutePath(),  "User game config directory");
     public final ListProperty<String> modDirsForSearch = listProp("modDirs", new TypeReference<>() {}, List.of(), "Mods directories");
@@ -36,5 +36,19 @@ public class DbProperties extends AbstractProperties {
 
     public File getXComModOptionsIniFile() {
         return new File(userGameConfigDir.get() + "/XComGame/Config/XComModOptions.ini");
+    }
+
+    public File getPossibleGameDir() {
+        File gameExeFile = gameExe.optional().map(File::new).orElse(null);
+        if (gameExeFile != null) {
+            try {
+                if (gameExeFile.exists()) { // XCOM 2/XCom2-WarOfTheChosen/Binaries/Win64/XCom2.exe
+                    return gameExeFile.getParentFile().getParentFile().getParentFile().getParentFile();
+                }
+            } catch (Exception e) {
+                return null;
+            }
+        }
+        return null;
     }
 }

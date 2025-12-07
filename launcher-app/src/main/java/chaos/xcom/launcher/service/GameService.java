@@ -2,11 +2,9 @@ package chaos.xcom.launcher.service;
 
 import chaos.xcom.launcher.db.property.DbProperties;
 import chaos.xcom.launcher.exception.InternalException;
-import chaos.xcom.launcher.gui.MainForm.MainFormService;
 import chaos.xcom.launcher.mod.ModService;
 import chaos.xcom.launcher.mod.dto.Mod;
 import chaos.xcom.launcher.util.FileUtils;
-import chaos.xcom.launcher.util.IniUtils;
 import chaos.xcom.launcher.util.OsUtils;
 import chaos.xcom.launcher.util.XComIniUtils;
 import jakarta.enterprise.inject.spi.CDI;
@@ -18,10 +16,7 @@ import org.apache.commons.lang3.ObjectUtils;
 import javax.swing.*;
 import java.io.File;
 import java.nio.file.Files;
-import java.nio.file.attribute.FileAttribute;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
 
 @Singleton
 @Slf4j
@@ -31,8 +26,7 @@ public class GameService {
     private final DbProperties dbProps;
 
     public void startGame() {
-        String gameDir = dbProps.gameDir.optional().orElse("");
-        File exeFile = new File(gameDir + "/XCom2-WarOfTheChosen/Binaries/Win64/XCom2.exe");
+        File exeFile = new File(dbProps.gameExe.optional().orElse(""));
         if (!exeFile.exists()) {
             log.info("XCOM exe file doesn't exist: {}", exeFile);
             JOptionPane.showMessageDialog(null,
@@ -42,15 +36,18 @@ public class GameService {
         }
         prepareModsBeforeGameStart();
 
-
         try {
             log.info("Starting game: {}", exeFile);
             List<String> exeCommands = new ArrayList<>();
             exeCommands.add(exeFile.getAbsolutePath());
-            //exeCommands.addAll(dbProps.gameLaunchArgs.get());
+            exeCommands.addAll(dbProps.gameLaunchArgs.get());
+
             ProcessBuilder pb = new ProcessBuilder(exeCommands);
+            pb.redirectOutput(ProcessBuilder.Redirect.INHERIT); // or new File("NUL") to avoid game logs? Without it game hung?
+            pb.redirectError(ProcessBuilder.Redirect.INHERIT); // or new File("NUL") to avoid game logs? Without redirect game hung?
             pb.directory(exeFile.getParentFile());
             pb.start();
+
             if (dbProps.exitOnGameLaunch.isTrue()) {
                 log.info("Exiting after game started");
                 System.exit(0);

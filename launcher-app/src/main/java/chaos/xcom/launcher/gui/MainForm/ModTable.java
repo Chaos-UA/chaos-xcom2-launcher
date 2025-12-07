@@ -17,6 +17,7 @@ import java.awt.*;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.net.URI;
+import java.util.Arrays;
 import java.util.List;
 
 public class ModTable extends XTable {
@@ -48,40 +49,66 @@ public class ModTable extends XTable {
 
             private void showMenu(MouseEvent e) {
                 if (e.isPopupTrigger()) {
-                    int rowAtPoint = rowAtPoint(e.getPoint());
-                    if (rowAtPoint >= 0) {
-                        setRowSelectionInterval(rowAtPoint, rowAtPoint);
-                        Mod mod = getSelectedMod();
-                        if (mod == null) {
-                            return;
+                    List<Mod> selectedMods = Arrays.stream(getSelectedRows()).mapToObj(v -> getModByIndex(v)).toList();
+                    if (selectedMods.isEmpty()) {
+                        return;
+                    }
+
+                    JPopupMenu menu = new JPopupMenu();
+
+                    JMenuItem activateModsItem = new JMenuItem("Activate");
+                    activateModsItem.addActionListener(ae -> {
+                        ModService modService = getModService();
+                        for (Mod mod : selectedMods) {
+                            modService.setModActive(mod.getId(), true);
                         }
+                    });
+                    menu.add(activateModsItem);
 
-                        JPopupMenu menu = new JPopupMenu();
+                    JMenuItem deactivateModsItem = new JMenuItem("Deactivate");
+                    deactivateModsItem.addActionListener(ae -> {
+                        ModService modService = getModService();
+                        for (Mod mod : selectedMods) {
+                            modService.setModActive(mod.getId(), false);
+                        }
+                    });
+                    menu.add(deactivateModsItem);
 
-                        JMenuItem openDir = new JMenuItem("Open mod directory");
-                        openDir.addActionListener(ae -> {
-                            try {
+                    JMenuItem openDir = new JMenuItem("Open mod directory");
+                    openDir.addActionListener(ae -> {
+                        try {
+                            for (Mod mod : selectedMods) {
                                 Desktop.getDesktop().open(mod.getDirectory());
-                            } catch (IOException ex) {
-                                throw new RuntimeException(ex);
+                            }
+                        } catch (IOException ex) {
+                            throw new RuntimeException(ex);
+                        }
+                    });
+                    menu.add(openDir);
+                    List<Mod> modsWithSteamId = selectedMods.stream()
+                            .filter(mod -> StringUtils.isNotBlank(mod.getSteamMod().getSteamModId()))
+                            .toList();
+                    if (!modsWithSteamId.isEmpty()) {
+                        JMenuItem openSteamMod = new JMenuItem("Open mod in Steam");
+                        openSteamMod.addActionListener(ae -> {
+                            try {
+                                for (Mod mod : modsWithSteamId) {
+                                    Desktop.getDesktop().browse(new URI("https://steamcommunity.com/sharedfiles/filedetails/?id=" + mod.getPublishedFileId()));
+                                }
+                            } catch (Exception ex) {
+                                throw new InternalException().cause(ex);
                             }
                         });
-                        menu.add(openDir);
+                        menu.add(openSteamMod);
 
-                        if (StringUtils.isNoneBlank(mod.getPublishedFileId()) && !"0".equals(mod.getPublishedFileId())) {
-                            JMenuItem openSteamMod = new JMenuItem("Open mod in Steam");
-                            openSteamMod.addActionListener(ae -> {
-                                try {
-                                    Desktop.getDesktop().browse(new URI("https://steamcommunity.com/sharedfiles/filedetails/?id=" + mod.getPublishedFileId()));
-                                } catch (Exception ex) {
-                                    throw new InternalException().cause(ex);
-                                }
-                            });
-                            menu.add(openSteamMod);
-                        }
+                        JMenuItem syncSteamMod = new JMenuItem("Sync mod info from Steam");
+                        syncSteamMod.addActionListener(ae -> {
+                            getModService().SyncSteamMods(modsWithSteamId);
+                        });
+                        menu.add(syncSteamMod);
 
-                        menu.show(e.getComponent(), e.getX(), e.getY());
                     }
+                    menu.show(e.getComponent(), e.getX(), e.getY());
                 }
             }
         });
@@ -100,7 +127,7 @@ public class ModTable extends XTable {
     }
 
     /**
-     * Fix LookAndFill change
+     * Fix LookAndFill change without restarting the app
      */
     @Override
     public void updateUI() {
@@ -112,6 +139,10 @@ public class ModTable extends XTable {
 
     public ModTableModel getModel() {
         return (ModTableModel) super.getModel();
+    }
+
+    public Mod getModByIndex(int modIndex) {
+        return getModel().getModByRawIndex(convertRowIndexToModel(modIndex));
     }
 
     public Mod getSelectedMod() {

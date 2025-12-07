@@ -22,7 +22,7 @@ public class CommunityHighlanderUtils {
      * Parses highlander entities from XComGame.ini file.
      */
     public static HighlanderModsConfig parseHighlanderXComGameIni(String mod, File file) {
-        HighlanderModsConfig modsConfig = new HighlanderModsConfig(mod);
+        HighlanderModsConfig modsConfig = new HighlanderModsConfig();
         HighlanderModConfig currentMod = null;
         boolean isCurrentRunOrder = false;
         boolean isCurrentDependency = false;
@@ -46,7 +46,7 @@ public class CommunityHighlanderUtils {
                         if (sectionTag.equalsIgnoreCase("CHModDependency")) {
                             isCurrentDependency = true;
                             isCurrentRunOrder = false;
-                            modsConfig.getModConfigs().computeIfAbsent(targetMod, k -> new HighlanderModConfig(targetMod));
+                            currentMod = modsConfig.getModConfigs().computeIfAbsent(targetMod, k -> new HighlanderModConfig(targetMod));
                         } else if (sectionTag.equalsIgnoreCase("CHDLCRunOrder")) {
                             isCurrentRunOrder = true;
                             isCurrentDependency = false;

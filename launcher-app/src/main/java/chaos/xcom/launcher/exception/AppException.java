@@ -17,7 +17,7 @@ public class AppException extends RuntimeException {
     }
 
     public AppException cause(Throwable cause) {
-        this.cause(cause);
+        initCause(cause);
         return this;
     }
 

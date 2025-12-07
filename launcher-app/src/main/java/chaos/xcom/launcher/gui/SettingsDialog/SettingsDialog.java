@@ -2,6 +2,9 @@ package chaos.xcom.launcher.gui.SettingsDialog;
 
 import chaos.xcom.launcher.db.property.DbProperties;
 import chaos.xcom.launcher.gui.LookAndFeelService;
+import chaos.xcom.launcher.swing.SwingService;
+import chaos.xcom.launcher.util.ColorConstant;
+import chaos.xcom.launcher.util.XComUtils;
 import com.intellij.uiDesigner.core.GridConstraints;
 import com.intellij.uiDesigner.core.GridLayoutManager;
 import com.intellij.uiDesigner.core.Spacer;
@@ -9,9 +12,11 @@ import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.Dependent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.flywaydb.core.internal.util.OsUtils;
 
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
+import javax.swing.filechooser.FileFilter;
 import java.awt.*;
 import java.awt.event.*;
 import java.io.File;
@@ -26,13 +31,13 @@ public class SettingsDialog extends JDialog {
     private final DbProperties dbProps;
     private final LookAndFeelService lookAndFeelService;
     private final SettingsService settingsService;
+    private final SwingService swingService;
     private final List<JCheckBox> cbArgs = new ArrayList<>();
 
     private JPanel contentPane;
-    private JButton buttonOK;
-    private JButton buttonCancel;
+    private JButton buttonClose;
     private JPanel pnlGameDirs;
-    private JTextField tfGameDir;
+    private JTextField tfGameExe;
     private JButton btnGameDir;
     private JButton btnAddModDir;
     private JButton btnRemoveModDir;
@@ -53,14 +58,12 @@ public class SettingsDialog extends JDialog {
     private JButton btnChangeUserGameDir;
     private JTextField tfXComEngineIniFile;
     private JTextField tfXComModOptionsIniFile;
+    private JLabel lblXComEngineError;
+    private JLabel lblXCOmModOptionsIniError;
+    private JLabel lblXComExe;
 
     public void openSettings() {
         this.setVisible(true);
-    }
-
-    private void onOK() {
-        // add your code here
-        dispose();
     }
 
     private void onCancel() {
@@ -77,7 +80,7 @@ public class SettingsDialog extends JDialog {
         setMinimumSize(getPreferredSize());
         setModal(true);
 
-        getRootPane().setDefaultButton(buttonOK);
+        getRootPane().setDefaultButton(buttonClose);
         setLocationRelativeTo(null);
 
         cbArgs.add(cbArgReview);
@@ -89,34 +92,46 @@ public class SettingsDialog extends JDialog {
         cbArgs.add(cbArgNoSeekFreeLoading);
         cbArgs.add(cbArgRegenerateinis);
 
-        buttonOK.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                onOK();
-            }
-        });
-
-        buttonCancel.addActionListener(new ActionListener() {
+        buttonClose.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 onCancel();
             }
         });
 
-        tfGameDir.setText(dbProps.gameDir.optional().orElse(null));
+        reloadGameExe();
         btnGameDir.addActionListener((e) -> {
             JFileChooser chooser = new JFileChooser();
-            chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-            chooser.setDialogTitle("Select XCOM game directory");
-            dbProps.gameDir.optional().ifPresent(gameDir -> {
-                chooser.setCurrentDirectory(new File(gameDir));
+            chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+            if (OsUtils.isWindows()) {
+                chooser.setFileFilter(new FileFilter() {
+                    @Override
+                    public boolean accept(File f) {
+                        // allow directories so user can navigate
+                        if (f.isDirectory()) return true;
+
+                        // accept only .exe (case-insensitive)
+                        return f.getName().toLowerCase().endsWith(".exe");
+                    }
+
+                    @Override
+                    public String getDescription() {
+                        return "XCOM WOTC executable file (*.exe)";
+                    }
+                });
+            }
+            chooser.setDialogTitle("Select XCOM executable file (usually XCom2-WarOfTheChosen/Binaries/Win64/XCom2.exe)");
+            dbProps.gameExe.optional().ifPresent(exeFile -> {
+                chooser.setCurrentDirectory(new File(exeFile).getParentFile());
             });
             int result = chooser.showOpenDialog(this);
             if (result == JFileChooser.APPROVE_OPTION) {
                 File selectedDir = chooser.getSelectedFile();
                 String gameDir = selectedDir.getAbsolutePath();
-                settingsService.updateGameDir(gameDir);
-                tfGameDir.setText(dbProps.gameDir.optional().orElse(null));
+                settingsService.updateGameExe(gameDir);
+                reloadGameExe();
+                tfGameExe.setText(dbProps.gameExe.optional().orElse(null));
                 reloadModDirs();
-                log.info("Selected game dir: {}", gameDir);
+                log.info("Selected game exe: {}", gameDir);
             }
         });
 
@@ -223,12 +238,24 @@ public class SettingsDialog extends JDialog {
             dbProps.exitOnGameLaunch.set(cbExitOnGameLaunch.isSelected());
             reloadCbExitOnGameLaunch();
         });
+
+        swingService.applyFullWindowState("SettingsDialog", this);
+    }
+
+    private void reloadGameExe() {
+        String gameExe = dbProps.gameExe.optional().orElse(null);
+        tfGameExe.setText(gameExe);
+        lblXComExe.setVisible(gameExe == null || !new File(gameExe).isFile() || !new File(gameExe).canExecute());
     }
 
     private void reloadUserGameDir() {
         tfUserGameDir.setText(dbProps.userGameConfigDir.get());
+
         tfXComEngineIniFile.setText(dbProps.getXComEngineIniFile().getAbsolutePath());
+        lblXComEngineError.setVisible(!dbProps.getXComEngineIniFile().exists());
+
         tfXComModOptionsIniFile.setText(dbProps.getXComModOptionsIniFile().getAbsolutePath());
+        lblXCOmModOptionsIniError.setVisible(!dbProps.getXComEngineIniFile().exists());
     }
 
     private void reloadCbExitOnGameLaunch() {
@@ -250,7 +277,34 @@ public class SettingsDialog extends JDialog {
 
     private void reloadModDirs() {
         DefaultListModel<String> model = new DefaultListModel<>();
+
+        jlModDirs.setCellRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index,
+                                                          boolean isSelected, boolean cellHasFocus) {
+
+                JLabel c = (JLabel) super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+
+                String path = (String) value;
+                File dir = new File(path);
+                if (!dir.exists()) {
+                    c.setText(path + " (not exists)");
+                    c.setForeground(Color.RED);
+                } else if (!dir.isDirectory()) {
+                    c.setText(" (not a directory)");
+                    c.setForeground(Color.RED);
+                } else if (!dir.canRead()) {
+                    c.setText(path + " (can't read)");
+                    c.setForeground(Color.RED);
+                } else if (XComUtils.isXcomWorkshopFolder(dir)) {
+                    c.setText(path + " (steam mods)");
+                }
+                return c;
+            }
+        });
+
         model.addAll(dbProps.modDirsForSearch.get());
+
         jlModDirs.setModel(model);
         updateBtnRemoveModDir();
     }
@@ -284,35 +338,21 @@ public class SettingsDialog extends JDialog {
         final Spacer spacer1 = new Spacer();
         panel1.add(spacer1, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_WANT_GROW, 1, null, null, null, 0, false));
         final JPanel panel2 = new JPanel();
-        panel2.setLayout(new GridLayoutManager(1, 2, new Insets(0, 0, 0, 0), -1, -1, true, false));
+        panel2.setLayout(new GridLayoutManager(1, 1, new Insets(0, 0, 0, 0), -1, -1));
         panel1.add(panel2, new GridConstraints(0, 1, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
-        buttonOK = new JButton();
-        buttonOK.setActionCommand("OK");
-        buttonOK.setText("Apply");
-        panel2.add(buttonOK, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
-        buttonCancel = new JButton();
-        buttonCancel.setText("Cancel");
-        panel2.add(buttonCancel, new GridConstraints(0, 1, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        buttonClose = new JButton();
+        buttonClose.setText("Close");
+        panel2.add(buttonClose, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         pnlGameDirs = new JPanel();
-        pnlGameDirs.setLayout(new GridLayoutManager(5, 3, new Insets(0, 0, 0, 0), -1, -1));
+        pnlGameDirs.setLayout(new GridLayoutManager(8, 3, new Insets(0, 0, 0, 0), -1, -1));
         contentPane.add(pnlGameDirs, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
         pnlGameDirs.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "Directories", TitledBorder.DEFAULT_JUSTIFICATION, TitledBorder.DEFAULT_POSITION, null, null));
         final JLabel label1 = new JLabel();
-        label1.setText("Game directory");
-        pnlGameDirs.add(label1, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
-        tfGameDir = new JTextField();
-        tfGameDir.setEditable(false);
-        tfGameDir.setName("");
-        pnlGameDirs.add(tfGameDir, new GridConstraints(0, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_WANT_GROW, GridConstraints.SIZEPOLICY_FIXED, null, new Dimension(150, -1), null, 0, false));
-        btnGameDir = new JButton();
-        btnGameDir.setText("Change");
-        pnlGameDirs.add(btnGameDir, new GridConstraints(0, 2, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
-        final JLabel label2 = new JLabel();
-        label2.setText("Mod directories");
-        pnlGameDirs.add(label2, new GridConstraints(4, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        label1.setText("Mod directories");
+        pnlGameDirs.add(label1, new GridConstraints(7, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         final JPanel panel3 = new JPanel();
         panel3.setLayout(new GridLayoutManager(3, 1, new Insets(0, 0, 0, 0), -1, -1));
-        pnlGameDirs.add(panel3, new GridConstraints(4, 2, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
+        pnlGameDirs.add(panel3, new GridConstraints(7, 2, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
         btnAddModDir = new JButton();
         btnAddModDir.setText("Add");
         panel3.add(btnAddModDir, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
@@ -322,28 +362,51 @@ public class SettingsDialog extends JDialog {
         final Spacer spacer2 = new Spacer();
         panel3.add(spacer2, new GridConstraints(2, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_VERTICAL, 1, GridConstraints.SIZEPOLICY_WANT_GROW, null, null, null, 0, false));
         jlModDirs = new JList();
-        pnlGameDirs.add(jlModDirs, new GridConstraints(4, 1, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_WANT_GROW, null, new Dimension(150, 50), null, 0, false));
-        final JLabel label3 = new JLabel();
-        label3.setText("User game directory");
-        pnlGameDirs.add(label3, new GridConstraints(1, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        pnlGameDirs.add(jlModDirs, new GridConstraints(7, 1, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_WANT_GROW, null, new Dimension(150, 50), null, 0, false));
+        final JLabel label2 = new JLabel();
+        label2.setText("User game directory");
+        pnlGameDirs.add(label2, new GridConstraints(2, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         tfUserGameDir = new JTextField();
         tfUserGameDir.setEditable(false);
-        pnlGameDirs.add(tfUserGameDir, new GridConstraints(1, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_WANT_GROW, GridConstraints.SIZEPOLICY_FIXED, null, new Dimension(150, -1), null, 0, false));
+        pnlGameDirs.add(tfUserGameDir, new GridConstraints(2, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_WANT_GROW, GridConstraints.SIZEPOLICY_FIXED, null, new Dimension(150, -1), null, 0, false));
         btnChangeUserGameDir = new JButton();
         btnChangeUserGameDir.setText("Change");
-        pnlGameDirs.add(btnChangeUserGameDir, new GridConstraints(1, 2, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        pnlGameDirs.add(btnChangeUserGameDir, new GridConstraints(2, 2, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        final JLabel label3 = new JLabel();
+        label3.setText("XComEngine.ini");
+        pnlGameDirs.add(label3, new GridConstraints(3, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         final JLabel label4 = new JLabel();
-        label4.setText("XComEngine.ini");
-        pnlGameDirs.add(label4, new GridConstraints(2, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
-        final JLabel label5 = new JLabel();
-        label5.setText("XComModOptions.ini");
-        pnlGameDirs.add(label5, new GridConstraints(3, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        label4.setText("XComModOptions.ini");
+        pnlGameDirs.add(label4, new GridConstraints(5, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         tfXComEngineIniFile = new JTextField();
         tfXComEngineIniFile.setEditable(false);
-        pnlGameDirs.add(tfXComEngineIniFile, new GridConstraints(2, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_WANT_GROW, GridConstraints.SIZEPOLICY_FIXED, null, new Dimension(150, -1), null, 0, false));
+        pnlGameDirs.add(tfXComEngineIniFile, new GridConstraints(3, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_WANT_GROW, GridConstraints.SIZEPOLICY_FIXED, null, new Dimension(150, -1), null, 0, false));
         tfXComModOptionsIniFile = new JTextField();
         tfXComModOptionsIniFile.setEditable(false);
-        pnlGameDirs.add(tfXComModOptionsIniFile, new GridConstraints(3, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_WANT_GROW, GridConstraints.SIZEPOLICY_FIXED, null, new Dimension(150, -1), null, 0, false));
+        pnlGameDirs.add(tfXComModOptionsIniFile, new GridConstraints(5, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_WANT_GROW, GridConstraints.SIZEPOLICY_FIXED, null, new Dimension(150, -1), null, 0, false));
+        lblXComEngineError = new JLabel();
+        lblXComEngineError.setForeground(new Color(-3790808));
+        lblXComEngineError.setText("XComEngine.ini not exists. Check path and you must start XCOM 2 once to generate the file");
+        pnlGameDirs.add(lblXComEngineError, new GridConstraints(4, 0, 1, 3, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        lblXCOmModOptionsIniError = new JLabel();
+        lblXCOmModOptionsIniError.setBackground(new Color(-13947600));
+        lblXCOmModOptionsIniError.setForeground(new Color(-3790808));
+        lblXCOmModOptionsIniError.setText("XComModOptions.ini not exists. Check path and you must start XCOM 2 once to generate the file");
+        pnlGameDirs.add(lblXCOmModOptionsIniError, new GridConstraints(6, 0, 1, 3, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        final JLabel label5 = new JLabel();
+        label5.setText("XCom2 (WOTC exe)");
+        pnlGameDirs.add(label5, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        btnGameDir = new JButton();
+        btnGameDir.setText("Change");
+        pnlGameDirs.add(btnGameDir, new GridConstraints(0, 2, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        lblXComExe = new JLabel();
+        lblXComExe.setForeground(new Color(-3790808));
+        lblXComExe.setText("File not exist or not executable, please check file location");
+        pnlGameDirs.add(lblXComExe, new GridConstraints(1, 0, 1, 3, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        tfGameExe = new JTextField();
+        tfGameExe.setEditable(false);
+        tfGameExe.setName("");
+        pnlGameDirs.add(tfGameExe, new GridConstraints(0, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_WANT_GROW, GridConstraints.SIZEPOLICY_FIXED, null, new Dimension(150, -1), null, 0, false));
         final JPanel panel4 = new JPanel();
         panel4.setLayout(new GridLayoutManager(4, 3, new Insets(0, 0, 0, 0), -1, -1));
         contentPane.add(panel4, new GridConstraints(1, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));

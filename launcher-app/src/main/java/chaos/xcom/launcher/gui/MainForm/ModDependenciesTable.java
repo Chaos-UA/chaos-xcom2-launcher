@@ -12,10 +12,16 @@ import lombok.Data;
 import org.jdesktop.swingx.decorator.AbstractHighlighter;
 import org.jdesktop.swingx.decorator.ComponentAdapter;
 
+import javax.swing.*;
+import javax.swing.table.JTableHeader;
 import java.awt.*;
+import java.awt.event.ActionEvent;
 import java.util.ArrayList;
 
 public class ModDependenciesTable extends XTable {
+    private static int MOD_ID_COLUMN_INDEX = 0;
+    private static int TARGET_MOD_ID_COLUMN_INDEX = 2;
+
     private ModDependenciesModel model;
     private Mod mod;
 
@@ -27,24 +33,41 @@ public class ModDependenciesTable extends XTable {
             @Override
             protected Component doHighlight(Component component, ComponentAdapter adapter) {
                 ModDependenciesTableRow row = model.getRow(convertRowIndexToModel(adapter.row));
-                if (mod == null || !mod.getId().equals(row.getModId())) {
+                if (row == null || mod == null) {
                     return component;
                 }
+                int colIndex = convertColumnIndexToModel(adapter.column);
+                if (colIndex == MOD_ID_COLUMN_INDEX) {
+                    JCheckBox checkBox = (JCheckBox) component;
+                    checkBox.setHorizontalAlignment(SwingConstants.LEFT);
+                    checkBox.setSelected(getModService().isModActive(row.getModId()));
+                    checkBox.setText(row.getModId());
+                    if (!getModService().isModExist(row.getModId())) {
+                        checkBox.setForeground(ColorConstant.getLabelDisabledForegroundColor());
+                    }
+                } else if (colIndex == TARGET_MOD_ID_COLUMN_INDEX) {
+                    JCheckBox checkBox = (JCheckBox) component;
+                    checkBox.setHorizontalAlignment(SwingConstants.LEFT);
+                    checkBox.setSelected(getModService().isModActive(row.getTargetModId()));
+                    checkBox.setText(row.getTargetModId());
+                    if (!getModService().isModExist(row.getTargetModId())) {
+                        JLabel lbl = new JLabel("  " + row.getTargetModId());
+                        checkBox.setForeground(ColorConstant.getLabelDisabledForegroundColor());
+                       // component = lbl;
+                    }
+                }
 
-                ModService modService = getModService();
                 if (row.getOverriddenByModId() != null) {
                     component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
-                } else if (row.getDependencyType() == Mod.DependencyType.REQUIRED
-                        && !modService.isModActive(row.getTargetModId())) {
+                }
+                if (row.isHasError()) {
                     component.setBackground(ColorConstant.MISSING_DEPENDENCY_MOD.getColor());
-                } else if (row.getDependencyType() == Mod.DependencyType.INCOMPATIBLE
-                        && modService.isModActive(row.getTargetModId())) {
-                    component.setBackground(ColorConstant.MISSING_DEPENDENCY_MOD.getColor());
-                } // todo ignore required alternative
+                }
 
                 return component;
             }
         });
+
         model.apply(this);
     }
 
@@ -66,9 +89,11 @@ public class ModDependenciesTable extends XTable {
         private String targetModId;
         private String declaredInModId;
         private String overriddenByModId;
+        private boolean hasError;
     }
 
-    public static class ModDependenciesModel extends XTableModel<ModDependenciesTableRow> {
+    public class ModDependenciesModel extends XTableModel<ModDependenciesTableRow> {
+
 
         public ModDependenciesModel() {
             super(createTableColumns());
@@ -84,6 +109,34 @@ public class ModDependenciesTable extends XTable {
             };
         }
 
+        @Override
+        public boolean isCellEditable(int rowIndex, int columnIndex) {
+            return true;
+        }
+
+        @Override
+        public Class<?> getColumnClass(int columnIndex) {
+            if (columnIndex == MOD_ID_COLUMN_INDEX) {
+                return Boolean.class;
+            } else if (columnIndex == TARGET_MOD_ID_COLUMN_INDEX) {
+                return Boolean.class;
+            }
+            return super.getColumnClass(columnIndex);
+        }
+
+        @Override
+        public void setValueAt(Object aValue, int rowIndex, int column) {
+            ModDependenciesTableRow row = model.getRow(rowIndex);
+            if (column == MOD_ID_COLUMN_INDEX) { // Active column
+                getModService().setModActive(row.getModId(), !getModService().isModActive(row.getModId()));
+            } else if (column == TARGET_MOD_ID_COLUMN_INDEX) {
+                getModService().setModActive(row.getTargetModId(), !getModService().isModActive(row.getTargetModId()));
+            } else {
+                super.setValueAt(aValue, rowIndex, column);
+            }
+            fireTableDataChanged();
+        }
+
         public void setMod(Mod mod) {
             if (mod == null) {
                 rows = new ArrayList<>();
@@ -96,12 +149,16 @@ public class ModDependenciesTable extends XTable {
                     row.setDeclaredInModId(modDependency.getDeclaredInMod());
                     row.setDependencyType(modDependency.getDependencyType());
                     row.setOverriddenByModId(modDependency.getOverriddenByMod());
+                    row.setHasError(modDependency.isHasError());
                     rows.add(row);
                 }
             }
         }
 
         public ModDependenciesTableRow getRow(int row) {
+            if (row < 0 || row >= getRowCount()) {
+                return null;
+            }
             return getRows().get(row);
         }
     }

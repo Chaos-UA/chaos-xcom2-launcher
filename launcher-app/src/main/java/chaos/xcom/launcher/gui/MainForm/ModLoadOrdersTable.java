@@ -20,6 +20,8 @@ import java.util.ArrayList;
  * Mod final load orders table.
  */
 public class ModLoadOrdersTable extends XTable {
+    private static final int MOD_ID_COLUMN_INDEX = 0;
+    private static final int TARGET_MOD_ID_COLUMN_INDEX = 2;
     private ModDeclaredRunOrdersModel model;
     private Mod mod;
 
@@ -31,11 +33,22 @@ public class ModLoadOrdersTable extends XTable {
             @Override
             protected Component doHighlight(Component component, ComponentAdapter adapter) {
                 ModRunOrderTableRow row = model.getRow(convertRowIndexToModel(adapter.row));
-                if (mod == null || !mod.getId().equals(row.getModId())) {
+                if (row == null || mod == null || !mod.getId().equals(row.getModId())) {
                     return component;
                 }
-
+                int colIndex = convertColumnIndexToModel(adapter.column);
                 ModService modService = getModService();
+
+                if (colIndex == MOD_ID_COLUMN_INDEX) {
+                    if (!modService.isModExist(row.getModId())) {
+                        component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
+                    }
+                } else if (colIndex == TARGET_MOD_ID_COLUMN_INDEX) {
+                    if (!modService.isModExist(row.getTargetModId())) {
+                        component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
+                    }
+                }
+
                 if (row.getOverriddenByModId() != null) {
                     component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
                 } else if (ModLoadOrder.LOAD_AFTER_REQUIRED.name().equals(row.getRunOrderType())
@@ -111,6 +124,9 @@ public class ModLoadOrdersTable extends XTable {
         }
 
         public ModRunOrderTableRow getRow(int row) {
+            if (row < 0 || row >= rows.size()) {
+                return null;
+            }
             return getRows().get(row);
         }
     }

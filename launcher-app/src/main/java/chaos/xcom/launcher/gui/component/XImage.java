@@ -1,5 +1,6 @@
 package chaos.xcom.launcher.gui.component;
 
+import chaos.xcom.launcher.util.ImageUtils;
 import lombok.extern.slf4j.Slf4j;
 
 import javax.imageio.ImageIO;
@@ -15,6 +16,12 @@ public class XImage extends JPanel {
     private volatile BufferedImage currentImage;
 
     public XImage() {}
+
+    public void setImage(Image image) {
+        this.currentImageFile = null;
+        this.currentImage = image == null ? null : ImageUtils.toBufferedImage(image);
+        repaint();
+    }
 
     public void setImage(File imageFile) {
         this.currentImageFile = imageFile;

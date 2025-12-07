@@ -12,18 +12,26 @@ import chaos.xcom.launcher.mod.dto.Mod.ModDependency;
 import chaos.xcom.launcher.mod.dto.Mod.ModLoadOrderDeclaration;
 import chaos.xcom.launcher.mod.dto.Mod.ModLoadOrderGroupDeclaration;
 import chaos.xcom.launcher.mod.dto.ModLoadOrder;
+import chaos.xcom.launcher.steam.SteamMod;
+import chaos.xcom.launcher.steam.SteamModRepository;
+import chaos.xcom.launcher.steam.SteamService;
+import chaos.xcom.launcher.steam.SteamSyncProgress;
 import chaos.xcom.launcher.util.FileUtils;
-import chaos.xcom.launcher.util.IniUtils;
 import chaos.xcom.launcher.util.SortUtils;
 import chaos.xcom.launcher.util.SortUtils.SortItem;
 import chaos.xcom.launcher.util.SortUtils.SortResult;
 import chaos.xcom.launcher.util.XComModFinderUtils;
+import chaos.xcom.launcher.util.XComUtils;
+import jakarta.enterprise.event.ObservesAsync;
 import jakarta.inject.Singleton;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.configuration2.INIConfiguration;
 
+import javax.swing.*;
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -36,6 +44,7 @@ public class ModService {
     private final DbProperties dbProps;
     private final MainForm mainForm;
     private final ModRepository modRepository;
+    private final SteamService steamService;
 
     /**
      * String is mod ID, and values are mods under this ID, multiple values in case of duplicates.
@@ -43,12 +52,17 @@ public class ModService {
    // private Map<String, List<Mod>> modsMap = new HashMap<>();
 
     private LinkedHashMap<String, Mod> allMods = new LinkedHashMap<>();
+    private HashMap<String, Mod> steamModIdToModMap = new HashMap<>();
 
     public void setModActive(String modId, boolean active) {
         Mod mod = allMods.get(modId);
         if (mod == null) {
             log.warn("Mod with ID {} not found", modId);
         } else {
+            if (mod.isActive() == active) {
+                log.info("Mod with ID {} is already {}", modId, active ? "active" : "inactive");
+                //return;
+            }
             mod.setActive(active);
             log.info("Mod with ID {} is now {}", modId, active ? "active" : "inactive");
             saveModToDb(mod);
@@ -73,7 +87,10 @@ public class ModService {
         modDbRecord.setId(mod.getId());
         modDbRecord.setTitle(mod.getTitle());
         modDbRecord.setActive(mod.isActive());
-        modDbRecord.setPublishedFileId(mod.getPublishedFileId());
+        SteamMod steamMod = mod.getSteamMod();
+        if (steamMod != null) {
+            modDbRecord.setSteamModId(steamMod.getSteamModId());
+        }
         return modDbRecord;
     }
 
@@ -82,6 +99,65 @@ public class ModService {
             return Optional.empty();
         }
         return Optional.ofNullable(allMods.get(modId));
+    }
+
+    public Optional<Mod> findModBySteamModId(String steamModId) {
+        return Optional.ofNullable(this.steamModIdToModMap.get(steamModId));
+    }
+
+    public void SyncAllSteamMods() {
+        steamService.SyncSteamModsInAsync(prepareSteamModsForSync(allMods.values()));
+    }
+
+    public void SyncMissingSteamMods() {
+        steamService.SyncSteamModsInAsync(prepareSteamModsForSync(allMods.values().stream()
+                .filter(v -> v.getSteamMod().getUpdatedAt() == null)
+                .toList()));
+    }
+
+    public void SyncSteamMods(Collection<Mod> mods) {
+        steamService.SyncSteamModsInAsync(prepareSteamModsForSync(mods));
+    }
+
+    /**
+     * @return mods sorted by not synced yet then from most outdated to most recently synced.
+     */
+    static List<String> prepareSteamModsForSync(Collection<Mod> mods) {
+        return mods.stream()
+                .filter(v -> v.getSteamMod().getSteamModId() != null)
+                .sorted(Comparator.comparing(
+                        mod -> mod.getSteamMod().getUpdatedAt(),
+                        Comparator.nullsFirst(Comparator.naturalOrder())
+                ))
+                .map(v -> v.getSteamMod().getSteamModId())
+                .collect(Collectors.toList());
+    }
+
+    public void onSteamSyncProgress(@ObservesAsync SteamSyncProgress steamSyncProgress) {
+        SwingUtilities.invokeLater(() -> mainForm.onSteamSyncProgress(steamSyncProgress));
+        if (steamSyncProgress.isComplete()) {
+            recalculateModDependencies();
+        }
+    }
+
+    public void onSteamModParsed(@ObservesAsync SteamMod steamMod) {
+        Mod mod = steamModIdToModMap.get(steamMod.getSteamModId());
+        if (mod == null) {
+            return;
+        }
+        SteamMod currentSteamMod = mod.getSteamMod();
+        if (!currentSteamMod.getRequiredSteamMods().equals(steamMod.getRequiredSteamMods())) {
+            log.info("Detected changes in steam mod {} for mod {}. Recalculating",
+                    steamMod.getSteamModName(), mod.getId());
+            recalculateModDependencies();
+        } else {
+            log.info("No dependency changes detected in steam mod {} for mod {}", steamMod.getSteamModName(), mod.getId());
+            currentSteamMod.setUpdatedAt(steamMod.getUpdatedAt());
+            currentSteamMod.setSteamModName(steamMod.getSteamModName());
+            currentSteamMod.setDescription(steamMod.getDescription());
+            currentSteamMod.setRequiredSteamMods(steamMod.getRequiredSteamMods());
+        }
+        SwingUtilities.invokeLater(mainForm::onMainTableDataChange);
     }
 
     /**
@@ -99,11 +175,12 @@ public class ModService {
         return result;
     }
 
-    void recalculateModDependencies() {
+    synchronized void recalculateModDependencies() {
         // clear all dependencies state
         for (Mod mod : allMods.values()) {
             mod.clearStateForLoadOrderCalculation();
         }
+        fillSteamMods(allMods);
         List<Mod> activeMods = new ArrayList<>();
         List<Mod> inactiveMods = new ArrayList<>();
         for (Mod mod : allMods.values()) {
@@ -115,6 +192,7 @@ public class ModService {
         }
 
         LinkedHashMap<String, Mod> loadOrderSortedMods = toLinkedHashMap(sortModsForLoadOrder(activeMods));
+        inactiveMods.sort(Comparator.comparing(mod -> mod.getId().toLowerCase()));
         for (Mod inactiveMod : inactiveMods) {
             loadOrderSortedMods.put(inactiveMod.getId(), inactiveMod);
         }
@@ -150,18 +228,23 @@ public class ModService {
         if (!mod.isExist()) {
             modStatuses.add(Mod.Status.DELETED);
         }
+        if (!mod.getCycleMods().isEmpty()) {
+            modStatuses.add(Mod.Status.CYCLIC_DEPENDENCY);
+        }
 
         for (ModDependency modDependency : mod.getDependencies()) {
-            if (!Objects.equals(modDependency.getMod(), mod.getId())) {
+            if (!Objects.equals(modDependency.getMod(), mod.getId()) || modDependency.getOverriddenByMod() != null) {
                 continue;
             }
             Mod targetMod = allMods.get(modDependency.getTargetMod());
             if (modDependency.getDependencyType() == Mod.DependencyType.REQUIRED
                     && (targetMod == null || !targetMod.isActive())) {
                 modStatuses.add(Mod.Status.REQUIRE_DEPENDENCY);
+                modDependency.setHasError(true);
             } else if (modDependency.getDependencyType() == Mod.DependencyType.INCOMPATIBLE
                     && targetMod != null && targetMod.isActive()) {
                 modStatuses.add(Mod.Status.INCOMPATIBLE_DEPENDENCY);
+                modDependency.setHasError(true);
             }
         }
 
@@ -353,6 +436,7 @@ public class ModService {
             }
         }
 
+        // fill incoming dependencies
         for (Mod mod : mods) {
             for (ModDependency modDependency : mod.getDependencies()) {
                 if (!modDependency.getTargetMod().equals(mod.getId())) {
@@ -448,7 +532,7 @@ public class ModService {
                 if (setCycleModsToMods) {
                     List<Mod> cycleMods = cycleModsGroup.stream().map(mods::get).filter(Objects::nonNull).toList();
                     for (Mod cycleMod : cycleMods) {
-                        cycleMod.setCycleMods(cycleMods);
+                        cycleMod.getCycleMods().add(cycleMods);
                     }
                 }
             }
@@ -473,10 +557,10 @@ public class ModService {
                 mod = new Mod();
                 mod.setId(modDbRecord.getId());
                 mod.setTitle(modDbRecord.getTitle());
-                mod.setPublishedFileId(modDbRecord.getPublishedFileId());
-                mod.setExist(false);
-            } else {
-                mod.setExist(true);
+                map.put(modDbRecord.getId(), mod);
+            }
+            if (modDbRecord.getSteamModId() != null) {
+                mod.getSteamMod().setSteamModId(modDbRecord.getSteamModId());
             }
             mod.setActive(modDbRecord.getActive());
         }
@@ -485,19 +569,37 @@ public class ModService {
         recalculateModDependencies();
     }
 
-    public void reloadModsFromDirs() {
-        List<File> modDirs = searchModsInDirs();
-        List<Mod> parsedMods = parseMods(modDirs);
+    void fillSteamMods(Map<String, Mod> mods) {
+        long start = System.currentTimeMillis();
+        Map<String, SteamMod> steamMods = steamService.findAllSteamMods();
+        HashMap<String, Mod> steamModIdToModMap = new HashMap<>(steamMods.size());
+        // build map from steamModId to mod
+        for (Mod mod : mods.values()) {
+            if (mod.getSteamMod().getSteamModId() != null) {
+                SteamMod steamMod = steamMods.get(mod.getSteamMod().getSteamModId());
+                if (steamMod != null) {
+                    mod.setSteamMod(steamMod);
+                }
+                steamModIdToModMap.putIfAbsent(mod.getSteamMod().getSteamModId(), mod);
+            }
+        }
+        log.info("Filled steam mods info to {} mods in {}ms", steamModIdToModMap.size(), System.currentTimeMillis() - start);
+        this.steamModIdToModMap = steamModIdToModMap;
+    }
 
+    public void reloadModsFromDirs() {
+        List<Mod> parsedMods = parseModsFromDirs();
         setModsMapAfterLoading(parsedMods);
     }
 
-    public List<File> searchModsInDirs() {
-        List<File> modDirs = new ArrayList<>();
-        for (String modDir : dbProps.modDirsForSearch.get()) {
-            modDirs.addAll(reloadModsFromDir(new File(modDir)));
+    List<Mod> parseModsFromDirs() {
+        List<Mod> parsedMods = new ArrayList<>();
+        for (String modsDir : dbProps.modDirsForSearch.get()) {
+            boolean isSteamWorkshopModDir = XComUtils.isXcomWorkshopFolder(new File(modsDir));
+            List<File> modsFiles = reloadModsFromDir(new File(modsDir));
+            parsedMods.addAll(parseMods(isSteamWorkshopModDir, modsFiles));
         }
-        return modDirs;
+        return parsedMods;
     }
 
     public List<File> reloadModsFromDir(File modDir) {
@@ -509,31 +611,46 @@ public class ModService {
         return modsFiles;
     }
 
-    public List<Mod> parseMods(Collection<File> modDirs) {
-        return modDirs.stream().map(this::parseMod).toList();
+    public List<Mod> parseMods(boolean isSteamWorkshopMod, Collection<File> modDirs) {
+        return modDirs.stream().map(v -> parseMod(isSteamWorkshopMod, v))
+                .filter(Objects::nonNull).toList();
     }
 
-    public Mod parseMod(File modFile) {
-        INIConfiguration modConfig = IniUtils.loadProperties(modFile);
-        Mod mod = new Mod();
-        mod.setId(modFile.getName().substring(0, modFile.getName().length() - XComModFinderUtils.MOD_FILE_EXTENSION.length()));
-        mod.setPublishedFileId(parseModProp("publishedFileId", modConfig));
-        mod.setTitle(parseModProp("Title", modConfig));
-        mod.setDescription(parseModProp("Description", modConfig));
-        mod.setRequiresXPACK("true".equalsIgnoreCase(parseModProp("RequiresXPACK", modConfig)));
-        mod.setTags(parseModProp("Tags", modConfig));
-        mod.setSize(FileUtils.getDirectorySize(modFile.getParentFile().toPath()));
-        mod.setDirectory(modFile.getParentFile().getAbsoluteFile());
-
-        File xcomGameIniFile = new File(modFile.getParentFile().getAbsolutePath() + "/Config/XComGame.ini");
-        mod.setHighlanderModsConfig(CommunityHighlanderUtils.parseHighlanderXComGameIni(mod.getId(), xcomGameIniFile));
-        return mod;
+    public Mod parseMod(boolean isSteamWorkshopMod, File modFile) {
+        try {
+            String xcomModFileContent = Files.readString(modFile.toPath());
+            Properties props = new Properties();
+            props.load(new ByteArrayInputStream(xcomModFileContent.getBytes(StandardCharsets.UTF_8)));
+            Mod mod = new Mod();
+            mod.setId(modFile.getName().substring(0, modFile.getName().length() - XComModFinderUtils.MOD_FILE_EXTENSION.length()));
+            mod.setXcomModFileContent(xcomModFileContent);
+            mod.setPublishedFileId(parseModProp("publishedFileId", props));
+            mod.setTitle(parseModProp("Title", props));
+            //mod.setDescription(parseModProp("Description", props));
+            mod.setRequiresXPACK("true".equalsIgnoreCase(parseModProp("RequiresXPACK", props)));
+            //mod.setTags(parseModProp("Tags", props));
+            mod.setSize(FileUtils.getDirectorySize(modFile.getParentFile().toPath()));
+            mod.setDirectory(modFile.getParentFile().getAbsoluteFile());
+            if (isSteamWorkshopMod) {
+                try {
+                    mod.getSteamMod().setSteamModId(modFile.getParentFile().getName());
+                } catch (Exception e) {
+                    log.error("Failed to parse steam mod ID from dir name: {}", modFile.getParentFile().getName(), e);
+                }
+            }
+            File xcomGameIniFile = new File(modFile.getParentFile().getAbsolutePath() + "/Config/XComGame.ini");
+            mod.setHighlanderModsConfig(CommunityHighlanderUtils.parseHighlanderXComGameIni(mod.getId(), xcomGameIniFile));
+            return mod;
+        } catch (Exception e) {
+            log.error("Error while reading mod file {}", modFile.getAbsolutePath(), e);
+            return null;
+        }
     }
 
-    private String parseModProp(String key, INIConfiguration source) {
-        String value = source.getString(key);
-        if (value == null) {
-            value = source.getString("mod." + key);
+    private String parseModProp(String key, Properties props) {
+        String value = props.getProperty(key);
+        if (value != null) {
+            return value.strip();
         }
         return value;
     }
@@ -567,4 +684,11 @@ public class ModService {
         Mod mod = allMods.get(modId);
         return mod != null && mod.isActive();
     }
+
+    public boolean isModExist(String targetModId) {
+        Mod mod = allMods.get(targetModId);
+        return mod != null && mod.isExist();
+    }
+
+
 }

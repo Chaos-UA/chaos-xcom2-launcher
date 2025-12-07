@@ -1,26 +1,29 @@
 package chaos.xcom.launcher.gui.MainForm;
 
 import chaos.xcom.launcher.gui.component.XImage;
+import chaos.xcom.launcher.gui.component.XScrollPane;
 import chaos.xcom.launcher.mod.ModService;
 import chaos.xcom.launcher.mod.dto.Mod;
+import chaos.xcom.launcher.steam.SteamSyncProgress;
+import chaos.xcom.launcher.swing.SwingService;
+import chaos.xcom.launcher.util.ImageUtils;
+import com.formdev.flatlaf.extras.components.*;
 import com.intellij.uiDesigner.core.GridConstraints;
 import com.intellij.uiDesigner.core.GridLayoutManager;
-import com.intellij.uiDesigner.core.Spacer;
 import io.quarkus.runtime.Startup;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.inject.Singleton;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
-import javax.swing.event.ListSelectionEvent;
-import javax.swing.event.ListSelectionListener;
+import javax.swing.event.*;
 import java.awt.*;
 import java.awt.event.*;
+import java.net.URI;
 import java.util.List;
 
 @Singleton
@@ -32,19 +35,26 @@ public class MainForm extends JFrame {
     private ModTable tblModsList;
     private JPanel pnlRoot;
     private final XImage pnlModImage = new XImage();
-    private JTabbedPane tabModInfoPanel;
 
     private final ModDeclaredDependenciesTable tblDeclaredDependencies = new ModDeclaredDependenciesTable();
     private final ModDeclaredRunOrdersTable tblDeclaredRunOrders = new ModDeclaredRunOrdersTable();
     private final ModLoadOrdersTable tblModRunOrders = new ModLoadOrdersTable();
     private final ModDependenciesTable tblModDependencies = new ModDependenciesTable();
-    private JTextField tfModFilter;
+    private FlatTextField tfModFilter;
+    private CycleModIssuesPanel cycleModIssuesPanel1 = new CycleModIssuesPanel();
+    private JProgressBar pbSteamProgress;
+    private FlatEditorPane epSteamDescription;
+    private FlatEditorPane epXcomMod;
+    private JScrollPane spXcomModDesc;
+    private FlatScrollPane spSteamDescription;
     private final MainFormMenuBar mainFormMenuBar;
+    private final SwingService swingService;
     private Mod selectedMod;
 
     @PostConstruct
     public void init() {
         setTitle("XCOM Chaos Mod Launcher 1.0.0");
+        this.setIconImage(ImageUtils.WOTC_ICON.getImage());
         this.addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
@@ -56,6 +66,7 @@ public class MainForm extends JFrame {
         setMinimumSize(new Dimension(320, 240));
         setLocationRelativeTo(null);
         this.setJMenuBar(mainFormMenuBar);
+        pbSteamProgress.setVisible(false);
 
         tblModsList.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
             @Override
@@ -84,15 +95,31 @@ public class MainForm extends JFrame {
             }
         });
 
+        epSteamDescription.addHyperlinkListener(new HyperlinkListener() {
+            public void hyperlinkUpdate(HyperlinkEvent e) {
+                if (e.getEventType() == HyperlinkEvent.EventType.ACTIVATED) {
+                    try {
+                        // Use Java's Desktop API to open the link in the default browser
+                        if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                            Desktop.getDesktop().browse(new URI(e.getURL().toExternalForm()));
+                        }
+                    } catch (Exception ex) {
+                        log.error("Failed to open link: {}", e.getURL(), ex);
+                    }
+                }
+            }
+        });
+
+        spSteamDescription.getVerticalScrollBar().setUnitIncrement(XScrollPane.UNIT_INCREMENT);
+        spXcomModDesc.getVerticalScrollBar().setUnitIncrement(XScrollPane.UNIT_INCREMENT);
+
+        setSelectedMod(null);
+
+        swingService.applyFullWindowState("MainForm", this);
         setVisible(true);
         SwingUtilities.invokeLater(() -> {
             getModService().reloadModsFromDirs();
         });
-
-    }
-
-    public void updateMods(List<Mod> parsedMods) {
-        tblModsList.setMods(parsedMods);
     }
 
     void exitApp() {
@@ -110,13 +137,54 @@ public class MainForm extends JFrame {
         return CDI.current().select(ModService.class).get();
     }
 
+    public void updateMods(List<Mod> parsedMods) {
+        Mod currentSelectedMod = selectedMod;
+        tblModsList.setMods(parsedMods);
+        if (currentSelectedMod != null) {
+            int modIndex = parsedMods.indexOf(currentSelectedMod);
+            if (modIndex >= 0) {
+                int convertRowIndexToView = tblModsList.convertRowIndexToView(modIndex);
+                tblModsList.getSelectionModel().setSelectionInterval(convertRowIndexToView, convertRowIndexToView);
+                tblModsList.scrollRowToVisible(convertRowIndexToView);
+            }
+        }
+    }
+
     void setSelectedMod(Mod mod) {
         this.selectedMod = mod;
-        pnlModImage.setImage(mod == null ? null : mod.getModPreviewImgFile());
+
         tblDeclaredDependencies.setMod(mod);
         tblDeclaredRunOrders.setMod(mod);
         tblModRunOrders.setMod(mod);
         tblModDependencies.setMod(mod);
+        cycleModIssuesPanel1.setMod(mod);
+        if (mod == null) {
+            pnlModImage.setImage(ImageUtils.WOTC_ICON.getImage());
+            epXcomMod.setText(null);
+            epSteamDescription.setText(null);
+        } else {
+            pnlModImage.setImage(mod.getModPreviewImgFile());
+            epXcomMod.setText(mod.getXcomModFileContent());
+            epSteamDescription.setText("<html>" + StringUtils.stripToEmpty(mod.getSteamMod().getDescription()) + "</html>");
+        }
+        SwingUtilities.invokeLater(() -> {
+            spXcomModDesc.getVerticalScrollBar().setValue(0);
+            spXcomModDesc.getHorizontalScrollBar().setValue(0);
+            spSteamDescription.getVerticalScrollBar().setValue(0);
+            spSteamDescription.getHorizontalScrollBar().setValue(0);
+        });
+    }
+
+    public void onMainTableDataChange() {
+        tblModsList.getModel().fireTableDataChanged();
+    }
+
+    public void onSteamSyncProgress(SteamSyncProgress steamSyncProgress) {
+        pbSteamProgress.setString("Steam " + steamSyncProgress.syncedModsCount + " / " + steamSyncProgress.totalModsToSyncCount);
+        pbSteamProgress.setMinimum(0);
+        pbSteamProgress.setValue(steamSyncProgress.syncedModsCount);
+        pbSteamProgress.setMaximum(steamSyncProgress.totalModsToSyncCount);
+        pbSteamProgress.setVisible(!steamSyncProgress.isComplete());
     }
 
     {
@@ -138,6 +206,8 @@ public class MainForm extends JFrame {
         pnlRoot = new JPanel();
         pnlRoot.setLayout(new GridLayoutManager(2, 1, new Insets(0, 0, 0, 0), -1, -1));
         final JSplitPane splitPane1 = new JSplitPane();
+        splitPane1.setDividerLocation(300);
+        splitPane1.setResizeWeight(0.5);
         pnlRoot.add(splitPane1, new GridConstraints(1, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_WANT_GROW, null, new Dimension(200, 200), null, 0, false));
         final JSplitPane splitPane2 = new JSplitPane();
         splitPane2.setOrientation(0);
@@ -152,18 +222,37 @@ public class MainForm extends JFrame {
         tblModsList.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
         scrollPane1.setViewportView(tblModsList);
         final JPanel panel2 = new JPanel();
-        panel2.setLayout(new GridLayoutManager(2, 2, new Insets(0, 0, 0, 0), -1, -1));
+        panel2.setLayout(new GridLayoutManager(1, 1, new Insets(0, 0, 0, 0), -1, -1));
         splitPane2.setRightComponent(panel2);
         panel2.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "Mod information", TitledBorder.DEFAULT_JUSTIFICATION, TitledBorder.DEFAULT_POSITION, null, null));
-        panel2.add(pnlModImage, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, new Dimension(80, 180), new Dimension(180, 180), new Dimension(180, 180), 0, false));
-        tabModInfoPanel = new JTabbedPane();
-        panel2.add(tabModInfoPanel, new GridConstraints(0, 1, 2, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_WANT_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, new Dimension(200, 200), null, 0, false));
-        tabModInfoPanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), null, TitledBorder.DEFAULT_JUSTIFICATION, TitledBorder.DEFAULT_POSITION, null, null));
+        final FlatSplitPane flatSplitPane1 = new FlatSplitPane();
+        flatSplitPane1.setResizeWeight(0.0);
+        panel2.add(flatSplitPane1, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
+        flatSplitPane1.setLeftComponent(pnlModImage);
         final JPanel panel3 = new JPanel();
         panel3.setLayout(new GridLayoutManager(1, 1, new Insets(0, 0, 0, 0), -1, -1));
-        tabModInfoPanel.addTab("Untitled", panel3);
-        final Spacer spacer1 = new Spacer();
-        panel2.add(spacer1, new GridConstraints(1, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_VERTICAL, 1, GridConstraints.SIZEPOLICY_WANT_GROW, null, null, null, 0, false));
+        flatSplitPane1.setRightComponent(panel3);
+        final FlatTabbedPane flatTabbedPane1 = new FlatTabbedPane();
+        panel3.add(flatTabbedPane1, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
+        flatTabbedPane1.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), null, TitledBorder.DEFAULT_JUSTIFICATION, TitledBorder.DEFAULT_POSITION, null, null));
+        spSteamDescription = new FlatScrollPane();
+        spSteamDescription.setHorizontalScrollBarPolicy(30);
+        spSteamDescription.setShowButtons(false);
+        spSteamDescription.setSmoothScrolling(false);
+        flatTabbedPane1.addTab("Steam description", spSteamDescription);
+        epSteamDescription = new FlatEditorPane();
+        epSteamDescription.setContentType("text/html");
+        epSteamDescription.setEditable(false);
+        epSteamDescription.setText("<html>\r\n  <head>\r\n    \r\n  </head>\r\n  <body>\r\n  </body>\r\n</html>\r\n");
+        spSteamDescription.setViewportView(epSteamDescription);
+        spXcomModDesc = new JScrollPane();
+        spXcomModDesc.setHorizontalScrollBarPolicy(30);
+        flatTabbedPane1.addTab("XComMod", spXcomModDesc);
+        epXcomMod = new FlatEditorPane();
+        epXcomMod.setEditable(false);
+        epXcomMod.setMinimumSize(new Dimension(100, 23));
+        epXcomMod.setText("Label");
+        spXcomModDesc.setViewportView(epXcomMod);
         final JPanel panel4 = new JPanel();
         panel4.setLayout(new GridLayoutManager(4, 1, new Insets(0, 0, 0, 0), -1, -1));
         splitPane1.setRightComponent(panel4);
@@ -184,13 +273,15 @@ public class MainForm extends JFrame {
         tblDeclaredRunOrders.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
         scrollPane3.setViewportView(tblDeclaredRunOrders);
         final JPanel panel7 = new JPanel();
-        panel7.setLayout(new GridLayoutManager(1, 1, new Insets(0, 0, 0, 0), -1, -1));
+        panel7.setLayout(new GridLayoutManager(2, 1, new Insets(0, 0, 0, 0), -1, -1));
         panel4.add(panel7, new GridConstraints(3, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
         panel7.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "Final Load Order", TitledBorder.DEFAULT_JUSTIFICATION, TitledBorder.DEFAULT_POSITION, null, null));
         final JScrollPane scrollPane4 = new JScrollPane();
-        panel7.add(scrollPane4, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_WANT_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_WANT_GROW, null, null, null, 0, false));
+        panel7.add(scrollPane4, new GridConstraints(1, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_WANT_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_WANT_GROW, null, null, null, 0, false));
         tblModRunOrders.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
         scrollPane4.setViewportView(tblModRunOrders);
+        cycleModIssuesPanel1.putClientProperty("html.disable", Boolean.FALSE);
+        panel7.add(cycleModIssuesPanel1, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
         final JPanel panel8 = new JPanel();
         panel8.setLayout(new GridLayoutManager(1, 1, new Insets(0, 0, 0, 0), -1, -1));
         panel4.add(panel8, new GridConstraints(2, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
@@ -200,16 +291,18 @@ public class MainForm extends JFrame {
         tblModDependencies.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
         scrollPane5.setViewportView(tblModDependencies);
         final JPanel panel9 = new JPanel();
-        panel9.setLayout(new GridLayoutManager(1, 3, new Insets(0, 0, 0, 0), -1, -1));
+        panel9.setLayout(new GridLayoutManager(1, 2, new Insets(0, 0, 0, 0), -1, -1));
         pnlRoot.add(panel9, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
-        tfModFilter = new JTextField();
+        tfModFilter = new FlatTextField();
+        tfModFilter.setPlaceholderText("Mod Filter");
+        tfModFilter.setShowClearButton(true);
         tfModFilter.setToolTipText("Mod Filter");
-        panel9.add(tfModFilter, new GridConstraints(0, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, new Dimension(150, -1), new Dimension(150, -1), new Dimension(150, -1), 0, false));
-        final Spacer spacer2 = new Spacer();
-        panel9.add(spacer2, new GridConstraints(0, 2, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_WANT_GROW, 1, null, null, null, 0, false));
-        final JLabel label1 = new JLabel();
-        label1.setText(" Filter");
-        panel9.add(label1, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        panel9.add(tfModFilter, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, new Dimension(150, -1), new Dimension(150, -1), new Dimension(150, -1), 0, false));
+        pbSteamProgress = new JProgressBar();
+        pbSteamProgress.setString("");
+        pbSteamProgress.setStringPainted(true);
+        pbSteamProgress.setValue(0);
+        panel9.add(pbSteamProgress, new GridConstraints(0, 1, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_WANT_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
     }
 
     /**
@@ -222,4 +315,5 @@ public class MainForm extends JFrame {
     private void createUIComponents() {
         // TODO: place custom component creation code here
     }
+
 }
