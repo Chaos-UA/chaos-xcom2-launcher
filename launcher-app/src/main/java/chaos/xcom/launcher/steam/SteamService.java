@@ -51,7 +51,9 @@ public class SteamService {
                 String steamModId = null;
                 try {
                     steamModId = null;
+                    publishSteamSyncProgress();
                     steamModId = queueSteamIds.take(); // blocks until an item is available
+                    publishSteamSyncProgress();
                     processSteamMod(steamModId);
                 } catch (Exception e) {
                     log.error("Error processing steam mod {}", steamModId, e);
@@ -64,12 +66,15 @@ public class SteamService {
                     } else {
                         totalProcessedItems.incrementAndGet();
                     }
-                    int processedCount = totalProcessedItems.get();
-                    int totalCount = processedCount + pendingStreamIds.size();
-                    eventPublisher.publishAsync(new SteamSyncProgress(processedCount, totalCount));
                 }
             }
         });
+    }
+
+    private void publishSteamSyncProgress() {
+        int processedCount = totalProcessedItems.get();
+        int totalCount = processedCount + pendingStreamIds.size();
+        eventPublisher.publishAsync(new SteamSyncProgress(processedCount, totalCount));
     }
 
     public Map<String, SteamMod> findAllSteamMods() {

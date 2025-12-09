@@ -70,8 +70,8 @@ public class ModDeclaredDependenciesTable extends XTable {
                     ModDependencyTableRow row = new ModDependencyTableRow();
                     row.setModId(mod.getId());
                     row.setDependencyType(DependencyType.REQUIRED);
-                    if (targetSteamMod == null) {
-                        row.setTargetModId(steamRequiredMod.getSteamModName());
+                    if (targetSteamMod == null) { // todo open link and red?
+                        row.setTargetModId("missing: " + steamRequiredMod.getSteamModName() + " - " + steamRequiredMod.getSteamModId());
                     } else {
                         row.setTargetModId(targetSteamMod.getId());
                     }
@@ -92,7 +92,7 @@ public class ModDeclaredDependenciesTable extends XTable {
                     for (String ignoreRequiredModId : modConfig.getIgnoreRequiredMods()) {
                         ModDependencyTableRow row = new ModDependencyTableRow();
                         row.setModId(modConfig.getMod());
-                        row.setDependencyType(DependencyType.IGNORE_REQUIRED);
+                        row.setDependencyType(DependencyType.REPLACED);
                         row.setTargetModId(ignoreRequiredModId);
                         row.setSource(DeclarationSource.HIGHLANDER);
                         rows.add(row);

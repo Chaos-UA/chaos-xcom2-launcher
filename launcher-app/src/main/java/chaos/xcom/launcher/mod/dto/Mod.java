@@ -10,7 +10,6 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.io.File;
-import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -31,13 +30,18 @@ public class Mod {
     private Boolean exist;
     private long size;
     private File directory;
-    private Set<Mod.Status> statuses;
+    private Set<Mod.Status> statuses = new LinkedHashSet<>();
     /**
      * Order at which to load mods on game start.
      * To guaranty order, special symbolic links will be created with names alphabetically sorted, that game recognize.
      */
     private int loadOrder;
     private HighlanderModsConfig highlanderModsConfig = new HighlanderModsConfig();
+
+    /**
+     * TODO
+     */
+    private List<UserRuleDeclaration> userRuleDeclarations = new ArrayList<>();
 
     /**
      * TODO
@@ -91,7 +95,7 @@ public class Mod {
             ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
             declaredDependency.setMod(this.getId());
             declaredDependency.setTargetMod(ignoredRequiredModId);
-            declaredDependency.setDependencyType(DependencyType.IGNORE_REQUIRED);
+            declaredDependency.setDependencyType(DependencyType.REPLACED);
             declaredDependency.setDeclaredInMod(this.getId());
             declaredDependency.setSource(DeclarationSource.HIGHLANDER);
             result.add(declaredDependency);
@@ -156,6 +160,8 @@ public class Mod {
         return this.statuses.stream().map(Enum::toString).collect(Collectors.joining(", "));
     }
 
+
+
     @Data
     public static class ModLoadOrderGroupDeclaration {
         private HighlanderRunPriorityGroup modLoadOrderGroup;
@@ -194,7 +200,7 @@ public class Mod {
 
     public static enum DependencyType {
         REQUIRED,
-        IGNORE_REQUIRED,
+        REPLACED,
         INCOMPATIBLE
     }
 
@@ -204,7 +210,8 @@ public class Mod {
         DELETED,
         REQUIRE_DEPENDENCY,
         INCOMPATIBLE_DEPENDENCY,
-        CYCLIC_DEPENDENCY
+        DUPLICATE,
+        MISSING_REQUIRED_STEAM_MOD, CYCLIC_DEPENDENCY
     }
 
 }

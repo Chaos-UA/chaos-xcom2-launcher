@@ -13,7 +13,6 @@ import chaos.xcom.launcher.mod.dto.Mod.ModLoadOrderDeclaration;
 import chaos.xcom.launcher.mod.dto.Mod.ModLoadOrderGroupDeclaration;
 import chaos.xcom.launcher.mod.dto.ModLoadOrder;
 import chaos.xcom.launcher.steam.SteamMod;
-import chaos.xcom.launcher.steam.SteamModRepository;
 import chaos.xcom.launcher.steam.SteamService;
 import chaos.xcom.launcher.steam.SteamSyncProgress;
 import chaos.xcom.launcher.util.FileUtils;
@@ -105,17 +104,17 @@ public class ModService {
         return Optional.ofNullable(this.steamModIdToModMap.get(steamModId));
     }
 
-    public void SyncAllSteamMods() {
+    public void syncAllSteamMods() {
         steamService.SyncSteamModsInAsync(prepareSteamModsForSync(allMods.values()));
     }
 
-    public void SyncMissingSteamMods() {
+    public void syncMissingSteamMods() {
         steamService.SyncSteamModsInAsync(prepareSteamModsForSync(allMods.values().stream()
                 .filter(v -> v.getSteamMod().getUpdatedAt() == null)
                 .toList()));
     }
 
-    public void SyncSteamMods(Collection<Mod> mods) {
+    public void syncSteamMods(Collection<Mod> mods) {
         steamService.SyncSteamModsInAsync(prepareSteamModsForSync(mods));
     }
 
@@ -124,7 +123,7 @@ public class ModService {
      */
     static List<String> prepareSteamModsForSync(Collection<Mod> mods) {
         return mods.stream()
-                .filter(v -> v.getSteamMod().getSteamModId() != null)
+                .filter(v -> v != null && v.getSteamMod().getSteamModId() != null)
                 .sorted(Comparator.comparing(
                         mod -> mod.getSteamMod().getUpdatedAt(),
                         Comparator.nullsFirst(Comparator.naturalOrder())
@@ -158,6 +157,13 @@ public class ModService {
             currentSteamMod.setRequiredSteamMods(steamMod.getRequiredSteamMods());
         }
         SwingUtilities.invokeLater(mainForm::onMainTableDataChange);
+    }
+
+    public void removeDeletedMods(List<Mod> deletedMods) {
+        deletedMods = deletedMods.stream().filter(v -> !v.isExist()).toList();
+        log.info("Removing deleted mods: {}", deletedMods.stream().map(Mod::getId).toList());
+        modRepository.deleteByIds(deletedMods.stream().map(Mod::getId).toList());
+        reloadModsFromDirs();
     }
 
     /**
@@ -205,12 +211,20 @@ public class ModService {
         for (Mod mod : allMods.values()) {
             tableMods.add(mod);
             for (Mod duplicateMod : mod.getDuplicateMods()) {
-                duplicateMod.setActive(mod.isActive());
+                duplicateMod.setActive(false);
+                duplicateMod.setLoadOrder(mod.getLoadOrder());
+                duplicateMod.getStatuses().add(Mod.Status.DUPLICATE);
+                duplicateMod.getStatuses().add(Mod.Status.INACTIVE);
+                duplicateMod.setSteamMod(mod.getSteamMod());
                 tableMods.add(duplicateMod);
             }
         }
 
-        mainForm.updateMods(new ArrayList<>(loadOrderSortedMods.values()));
+        mainForm.updateMods(tableMods);
+        if (dbProps.syncMissingSteamModsOnReload.get()) {
+            this.syncMissingSteamMods();
+        }
+        Thread.ofVirtual().start(System::gc); // suggest GC to free memory after recalculation
     }
 
     void recalculateModsStatuses() {
@@ -236,6 +250,7 @@ public class ModService {
             if (!Objects.equals(modDependency.getMod(), mod.getId()) || modDependency.getOverriddenByMod() != null) {
                 continue;
             }
+
             Mod targetMod = allMods.get(modDependency.getTargetMod());
             if (modDependency.getDependencyType() == Mod.DependencyType.REQUIRED
                     && (targetMod == null || !targetMod.isActive())) {
@@ -248,10 +263,25 @@ public class ModService {
             }
         }
 
+        if (!hasAllSteamRequiredModsInfos(mod)) {
+            modStatuses.add(Mod.Status.MISSING_REQUIRED_STEAM_MOD);
+        }
+
         if (modStatuses.isEmpty()) {
             modStatuses.add(Mod.Status.OK);
         }
         mod.setStatuses(modStatuses);
+    }
+
+    private boolean hasAllSteamRequiredModsInfos(Mod mod) {
+        SteamMod steamMod = mod.getSteamMod();
+        for (var requiredSteamMod : steamMod.getRequiredSteamMods()) {
+            Mod requiredMod = steamModIdToModMap.get(requiredSteamMod.getSteamModId());
+            if (requiredMod == null) {
+                return false;
+            }
+        }
+        return true;
     }
 
 
@@ -397,7 +427,7 @@ public class ModService {
                     dependency.setMod(mod.getId());
                     dependency.setDeclaredInMod(declaredInMod.getId());
                     dependency.setTargetMod(ignoreRequiredMod);
-                    dependency.setDependencyType(Mod.DependencyType.IGNORE_REQUIRED);
+                    dependency.setDependencyType(Mod.DependencyType.REPLACED);
                     mod.addDependency(dependency);
                 }
 
@@ -541,12 +571,14 @@ public class ModService {
         return sortResult.getSorted().stream().map(mods::get).collect(Collectors.toList());
     }
 
-    void setModsMapAfterLoading(List<Mod> mods) {
+    void setModsMapAfterParsingFromDirs(List<Mod> mods) {
         LinkedHashMap<String, Mod> map = new LinkedHashMap<>();
         for (Mod mod : mods) {
-            Mod mod2 = map.computeIfAbsent(mod.getId(), (k) -> mod);
-            if (mod != mod2) { // duplicate detected
-                mod.getDuplicateMods().add(mod2);
+            Mod primaryMod = map.computeIfAbsent(mod.getId(), (k) -> mod);
+            if (mod != primaryMod) { // duplicate detected
+                primaryMod.getDuplicateMods().add(mod);
+                log.info("Detected duplicate mod with ID {} in dir1 {} and dir2 {}",
+                        mod.getId(), primaryMod.getDirectory(), mod.getDirectory());
             }
         }
 
@@ -589,7 +621,7 @@ public class ModService {
 
     public void reloadModsFromDirs() {
         List<Mod> parsedMods = parseModsFromDirs();
-        setModsMapAfterLoading(parsedMods);
+        setModsMapAfterParsingFromDirs(parsedMods);
     }
 
     List<Mod> parseModsFromDirs() {
@@ -689,6 +721,5 @@ public class ModService {
         Mod mod = allMods.get(targetModId);
         return mod != null && mod.isExist();
     }
-
 
 }

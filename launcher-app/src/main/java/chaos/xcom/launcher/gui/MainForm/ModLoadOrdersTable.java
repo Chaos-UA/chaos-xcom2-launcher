@@ -53,7 +53,7 @@ public class ModLoadOrdersTable extends XTable {
                     component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
                 } else if (ModLoadOrder.LOAD_AFTER_REQUIRED.name().equals(row.getRunOrderType())
                         && !modService.isModActive(row.getTargetModId())) {
-                    component.setBackground(ColorConstant.MISSING_DEPENDENCY_MOD.getColor());
+                    component.setBackground(ColorConstant.ERROR.getColor());
                 }
 
                 return component;

@@ -9,7 +9,7 @@ import java.awt.*;
 @RequiredArgsConstructor
 @Getter
 public enum ColorConstant {
-    MISSING_DEPENDENCY_MOD(new Color(255, 0, 0, 120)),
+    ERROR(new Color(255, 0, 0, 120)),
     DISABLED_MOD(new Color(255, 102, 102))
     ;
 

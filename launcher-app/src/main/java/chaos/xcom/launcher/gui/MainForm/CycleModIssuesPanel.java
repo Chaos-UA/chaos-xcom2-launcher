@@ -17,7 +17,7 @@ public class CycleModIssuesPanel extends JPanel {
         this.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "Cycle load order issues"));
         this.setLayout(new BorderLayout());
         this.add(cycleModIssuesList, BorderLayout.CENTER);
-        cycleModIssuesList.setBackground(ColorConstant.MISSING_DEPENDENCY_MOD.getColor());
+        cycleModIssuesList.setBackground(ColorConstant.ERROR.getColor());
     }
 
     public void setMod(Mod mod) {

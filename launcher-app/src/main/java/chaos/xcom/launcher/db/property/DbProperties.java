@@ -20,8 +20,11 @@ public class DbProperties extends AbstractProperties {
     public final IntProperty modDirMaxSubDirsForSearch = requiredIntProp("modDirMaxSubDirsForSearch", 4,
             "Max number of sub directories to go deep for while searching mods");
     public final StringProperty guiSkin = requiredStringProp("guiSkin", FlatIntelliJLaf.class.getName(), "GUI skin");
-    public final ListProperty<String> gameLaunchArgs = listProp("gameLaunchArgs", new TypeReference<>() {}, List.of(), "XCOM launch arguments");
+    public final ListProperty<String> gameLaunchArgs = listProp("gameLaunchArgs", new TypeReference<>() {},
+            List.of("-allowconsole","-noRedscreens","-review"), "XCOM launch arguments");
     public final BooleanProperty exitOnGameLaunch = booleanProp("exitOnGameLaunch", true, "Exit on XCOM game launch to free RAM memory resources");
+    public final BooleanProperty syncMissingSteamModsOnReload = booleanProp("syncMissingSteamModsOnReload", true,
+            "Sync missing Steam mods on mods reload");
     public final JsonProperty<SwingComponentStates> swingComponentStates = jsonProp("swingComponentStates",
             new TypeReference<>() {}, new SwingComponentStates(),
             "Swing components states. Windows positions, sizes, etc.");

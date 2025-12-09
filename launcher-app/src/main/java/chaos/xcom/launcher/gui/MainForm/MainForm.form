@@ -94,27 +94,45 @@
                             <properties/>
                             <border type="etched"/>
                             <children>
-                              <scrollpane id="2aecc" class="com.formdev.flatlaf.extras.components.FlatScrollPane" binding="spSteamDescription">
+                              <grid id="8dfa7" layout-manager="GridLayoutManager" row-count="2" column-count="1" same-size-horizontally="false" same-size-vertically="false" hgap="-1" vgap="-1">
+                                <margin top="0" left="0" bottom="0" right="0"/>
                                 <constraints>
                                   <tabbedpane title="Steam description"/>
                                 </constraints>
-                                <properties>
-                                  <horizontalScrollBarPolicy value="30"/>
-                                  <showButtons value="false"/>
-                                  <smoothScrolling value="false"/>
-                                </properties>
+                                <properties/>
                                 <border type="none"/>
                                 <children>
-                                  <component id="94495" class="com.formdev.flatlaf.extras.components.FlatEditorPane" binding="epSteamDescription">
-                                    <constraints/>
+                                  <scrollpane id="2aecc" class="com.formdev.flatlaf.extras.components.FlatScrollPane" binding="spSteamDescription">
+                                    <constraints>
+                                      <grid row="1" column="0" row-span="1" col-span="1" vsize-policy="3" hsize-policy="3" anchor="0" fill="3" indent="0" use-parent-layout="false"/>
+                                    </constraints>
                                     <properties>
-                                      <contentType value="text/html"/>
-                                      <editable value="false"/>
-                                      <text value="&lt;html&gt;&#13;&#10;  &lt;head&gt;&#13;&#10;    &#13;&#10;  &lt;/head&gt;&#13;&#10;  &lt;body&gt;&#13;&#10;  &lt;/body&gt;&#13;&#10;&lt;/html&gt;&#13;&#10;"/>
+                                      <horizontalScrollBarPolicy value="30"/>
+                                      <showButtons value="false"/>
+                                      <smoothScrolling value="false"/>
+                                    </properties>
+                                    <border type="none"/>
+                                    <children>
+                                      <component id="94495" class="com.formdev.flatlaf.extras.components.FlatEditorPane" binding="epSteamDescription">
+                                        <constraints/>
+                                        <properties>
+                                          <contentType value="text/html"/>
+                                          <editable value="false"/>
+                                          <text value="&lt;html&gt;&#13;&#10;  &lt;head&gt;&#13;&#10;    &#13;&#10;  &lt;/head&gt;&#13;&#10;  &lt;body&gt;&#13;&#10;  &lt;/body&gt;&#13;&#10;&lt;/html&gt;&#13;&#10;"/>
+                                        </properties>
+                                      </component>
+                                    </children>
+                                  </scrollpane>
+                                  <component id="c3fe" class="javax.swing.JButton" binding="btnSyncModSteamInfo">
+                                    <constraints>
+                                      <grid row="0" column="0" row-span="1" col-span="1" vsize-policy="0" hsize-policy="3" anchor="8" fill="0" indent="0" use-parent-layout="false"/>
+                                    </constraints>
+                                    <properties>
+                                      <text value="Sync Steam mod info"/>
                                     </properties>
                                   </component>
                                 </children>
-                              </scrollpane>
+                              </grid>
                               <scrollpane id="6fca5" binding="spXcomModDesc">
                                 <constraints>
                                   <tabbedpane title="XComMod"/>

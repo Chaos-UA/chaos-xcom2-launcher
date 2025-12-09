@@ -5,6 +5,7 @@ import chaos.xcom.launcher.gui.component.XTable;
 import chaos.xcom.launcher.gui.component.event.XTableModel;
 import chaos.xcom.launcher.highlander.dto.HighlanderModConfig;
 import chaos.xcom.launcher.highlander.dto.HighlanderModConfig.RunOrderDeclaration;
+import chaos.xcom.launcher.mod.dto.DeclarationSource;
 import chaos.xcom.launcher.mod.dto.Mod;
 import lombok.Data;
 
@@ -31,7 +32,7 @@ public class ModDeclaredRunOrdersTable extends XTable {
         private String modId;
         private String runOrderType;
         private String targetModId;
-        private Boolean active;
+        private DeclarationSource source;
     }
 
     public static class ModDeclaredRunOrdersModel extends XTableModel<ModRunOrderTableRow> {
@@ -44,7 +45,8 @@ public class ModDeclaredRunOrdersTable extends XTable {
             return new TableColumn[]{
                     new TableColumn<>("Mod ID", String.class, ModRunOrderTableRow::getModId),
                     new TableColumn<>("Run Order", String.class, ModRunOrderTableRow::getRunOrderType),
-                    new TableColumn<>("Target Mod ID", String.class, ModRunOrderTableRow::getTargetModId)
+                    new TableColumn<>("Target Mod ID", String.class, ModRunOrderTableRow::getTargetModId),
+                    new TableColumn<>("Source", DeclarationSource.class, ModRunOrderTableRow::getSource)
             };
         }
 
@@ -59,6 +61,7 @@ public class ModDeclaredRunOrdersTable extends XTable {
                         row.setModId(null);
                         row.setRunOrderType(modConfig.getRunPriorityGroup().name());
                         row.setTargetModId(modConfig.getMod());
+                        row.setSource(DeclarationSource.HIGHLANDER);
                         rows.add(row);
                     }
 
@@ -67,6 +70,7 @@ public class ModDeclaredRunOrdersTable extends XTable {
                         row.setModId(modConfig.getMod());
                         row.setRunOrderType(runOrderDeclaration.getModLoadOrder().name());
                         row.setTargetModId(runOrderDeclaration.getTargetMod());
+                        row.setSource(DeclarationSource.HIGHLANDER);
                         rows.add(row);
                     }
 

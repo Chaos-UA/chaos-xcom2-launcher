@@ -13,9 +13,7 @@ import org.jdesktop.swingx.decorator.AbstractHighlighter;
 import org.jdesktop.swingx.decorator.ComponentAdapter;
 
 import javax.swing.*;
-import javax.swing.table.JTableHeader;
 import java.awt.*;
-import java.awt.event.ActionEvent;
 import java.util.ArrayList;
 
 public class ModDependenciesTable extends XTable {
@@ -43,7 +41,11 @@ public class ModDependenciesTable extends XTable {
                     checkBox.setSelected(getModService().isModActive(row.getModId()));
                     checkBox.setText(row.getModId());
                     if (!getModService().isModExist(row.getModId())) {
-                        checkBox.setForeground(ColorConstant.getLabelDisabledForegroundColor());
+                        checkBox.setEnabled(false);
+                        //checkBox.setForeground(ColorConstant.getLabelDisabledForegroundColor());
+                        //JLabel lbl = new JLabel("  " + row.getTargetModId());
+                        //component = lbl;
+                        component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
                     }
                 } else if (colIndex == TARGET_MOD_ID_COLUMN_INDEX) {
                     JCheckBox checkBox = (JCheckBox) component;
@@ -51,9 +53,10 @@ public class ModDependenciesTable extends XTable {
                     checkBox.setSelected(getModService().isModActive(row.getTargetModId()));
                     checkBox.setText(row.getTargetModId());
                     if (!getModService().isModExist(row.getTargetModId())) {
-                        JLabel lbl = new JLabel("  " + row.getTargetModId());
-                        checkBox.setForeground(ColorConstant.getLabelDisabledForegroundColor());
-                       // component = lbl;
+                        checkBox.setEnabled(false);
+                        //JLabel lbl = new JLabel("  " + row.getTargetModId());
+                        //component = lbl;
+                        component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
                     }
                 }
 
@@ -61,7 +64,7 @@ public class ModDependenciesTable extends XTable {
                     component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
                 }
                 if (row.isHasError()) {
-                    component.setBackground(ColorConstant.MISSING_DEPENDENCY_MOD.getColor());
+                    component.setBackground(ColorConstant.ERROR.getColor());
                 }
 
                 return component;

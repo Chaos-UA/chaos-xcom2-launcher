@@ -9,7 +9,6 @@ import chaos.xcom.launcher.util.ColorConstant;
 import jakarta.enterprise.inject.spi.CDI;
 import org.apache.commons.lang3.StringUtils;
 import org.jdesktop.swingx.decorator.AbstractHighlighter;
-import org.jdesktop.swingx.decorator.ColorHighlighter;
 import org.jdesktop.swingx.decorator.ComponentAdapter;
 
 import javax.swing.*;
@@ -74,17 +73,22 @@ public class ModTable extends XTable {
                     });
                     menu.add(deactivateModsItem);
 
-                    JMenuItem openDir = new JMenuItem("Open mod directory");
-                    openDir.addActionListener(ae -> {
-                        try {
-                            for (Mod mod : selectedMods) {
-                                Desktop.getDesktop().open(mod.getDirectory());
+                    List<Mod> existingMods = selectedMods.stream()
+                            .filter(mod -> mod.isExist())
+                            .toList();
+                    if (!existingMods.isEmpty()) {
+                        JMenuItem openDir = new JMenuItem("Open mod directory");
+                        openDir.addActionListener(ae -> {
+                            try {
+                                for (Mod mod : selectedMods) {
+                                    Desktop.getDesktop().open(mod.getDirectory());
+                                }
+                            } catch (IOException ex) {
+                                throw new RuntimeException(ex);
                             }
-                        } catch (IOException ex) {
-                            throw new RuntimeException(ex);
-                        }
-                    });
-                    menu.add(openDir);
+                        });
+                        menu.add(openDir);
+                    }
                     List<Mod> modsWithSteamId = selectedMods.stream()
                             .filter(mod -> StringUtils.isNotBlank(mod.getSteamMod().getSteamModId()))
                             .toList();
@@ -103,9 +107,23 @@ public class ModTable extends XTable {
 
                         JMenuItem syncSteamMod = new JMenuItem("Sync mod info from Steam");
                         syncSteamMod.addActionListener(ae -> {
-                            getModService().SyncSteamMods(modsWithSteamId);
+                            getModService().syncSteamMods(modsWithSteamId);
                         });
                         menu.add(syncSteamMod);
+
+                        // remove deleted mod from list
+                        List<Mod> deletedMods = modsWithSteamId.stream()
+                                .filter(mod -> !mod.isExist())
+                                .toList();
+
+                        if (!deletedMods.isEmpty()) {
+                            JMenuItem removeDeletedMods = new JMenuItem("Remove deleted mod from list");
+                            removeDeletedMods.addActionListener(ae -> {
+                                ModService modService = getModService();
+                                modService.removeDeletedMods(deletedMods);
+                            });
+                            menu.add(removeDeletedMods);
+                        }
 
                     }
                     menu.show(e.getComponent(), e.getX(), e.getY());
@@ -114,16 +132,28 @@ public class ModTable extends XTable {
         });
 
 
-        addHighlighter(new ColorHighlighter(
-                (renderer, adapter) -> {
-                    // 4. Decide whether to highlight
-                    Mod mod = getModel().getModByRawIndex(convertRowIndexToModel(adapter.row));
-                    return mod.isActive() && !mod.getStatuses().contains(Mod.Status.OK);
-                },
-                ColorConstant.MISSING_DEPENDENCY_MOD.getColor(),
-                Color.WHITE
-        ));
+        this.addHighlighter(new AbstractHighlighter() {
+            @Override
+            protected Component doHighlight(Component component, ComponentAdapter adapter) {
+                Mod mod = getModel().getModByRawIndex(convertRowIndexToModel(adapter.row));
+                if (mod == null) {
+                    return component;
+                }
 
+                if (!mod.getStatuses().contains(Mod.Status.OK)) {
+                    if (mod.isActive()) {
+                        component.setBackground(ColorConstant.ERROR.getColor());
+                    } else { // not ok and not active
+                        component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
+                        if (mod.getStatuses().contains(Mod.Status.DUPLICATE)) {
+                            component.setBackground(ColorConstant.ERROR.getColor());
+                        }
+                    }
+                }
+
+                return component;
+            }
+        });
     }
 
     /**

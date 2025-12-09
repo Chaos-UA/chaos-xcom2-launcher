@@ -17,6 +17,7 @@ import javax.swing.*;
 import java.io.File;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 @Singleton
 @Slf4j
@@ -24,15 +25,46 @@ import java.util.*;
 public class GameService {
 
     private final DbProperties dbProps;
+    private Process process;
 
-    public void startGame() {
+    public synchronized void startGame() {
         File exeFile = new File(dbProps.gameExe.optional().orElse(""));
         if (!exeFile.exists()) {
             log.info("XCOM exe file doesn't exist: {}", exeFile);
             JOptionPane.showMessageDialog(null,
                     "XCOM exe file doesn't exist: " + exeFile.getAbsolutePath(), "Error",
                     JOptionPane.ERROR_MESSAGE);
+            process.destroy();
             return;
+        }
+        if (process != null && process.isAlive()) {
+            log.info("XCOM game is already running with PID: {}", process.pid());
+            int result = JOptionPane.showConfirmDialog(null,
+                    "XCOM game is already running. PID: " + process.pid()
+                            + ".\nKill process and start?", "Info",
+                    JOptionPane.YES_NO_OPTION);
+            if (result == JOptionPane.YES_OPTION) {
+                process.destroy();
+                try {
+                    process.waitFor(5, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    log.warn("Interrupted while waiting for XCOM process to terminate", e);
+                    process.destroyForcibly();
+                    try {
+                        process.waitFor(5, TimeUnit.SECONDS);
+                    } catch (InterruptedException ex) {
+                        log.error("Interrupted while waiting for XCOM process to terminate forcibly", ex);
+                        JOptionPane.showMessageDialog(null,
+                                "Failed to terminate XCOM process forcibly. PID: " + process.pid(),
+                                "Error", JOptionPane.ERROR_MESSAGE);
+                        return;
+                    }
+                }
+                log.info("Killed XCOM game process with PID: {}", process.pid());
+            } else {
+                log.info("Aborted XCOM game start since it's already running");
+                return;
+            }
         }
         prepareModsBeforeGameStart();
 
@@ -43,10 +75,10 @@ public class GameService {
             exeCommands.addAll(dbProps.gameLaunchArgs.get());
 
             ProcessBuilder pb = new ProcessBuilder(exeCommands);
-            pb.redirectOutput(ProcessBuilder.Redirect.INHERIT); // or new File("NUL") to avoid game logs? Without it game hung?
-            pb.redirectError(ProcessBuilder.Redirect.INHERIT); // or new File("NUL") to avoid game logs? Without redirect game hung?
+            pb.redirectOutput(ProcessBuilder.Redirect.DISCARD);
+            pb.redirectError(ProcessBuilder.Redirect.DISCARD);
             pb.directory(exeFile.getParentFile());
-            pb.start();
+            process = pb.start();
 
             if (dbProps.exitOnGameLaunch.isTrue()) {
                 log.info("Exiting after game started");

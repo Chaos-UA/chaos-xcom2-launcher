@@ -30,13 +30,13 @@ public class MainFormMenuBar extends JMenuBar {
 
         JMenuItem syncAllSteamMods = new JMenuItem("Sync info from steam for all mods");
         fileMenu.add(syncAllSteamMods);
-        syncAllSteamMods.addActionListener(e -> modService.get().SyncAllSteamMods());
+        syncAllSteamMods.addActionListener(e -> modService.get().syncAllSteamMods());
         syncAllSteamMods.setToolTipText("Sync dependencies for required mods from steam workshop. "
                 + "\nShould not be called often. May take a long time if you have many mods.");
 
         JMenuItem syncMissingSteamMods = new JMenuItem("Sync missing info from steam for mods");
         fileMenu.add(syncMissingSteamMods);
-        syncMissingSteamMods.addActionListener(e -> modService.get().SyncMissingSteamMods());
+        syncMissingSteamMods.addActionListener(e -> modService.get().syncMissingSteamMods());
 
         fileMenu.addSeparator();
         JMenuItem menuItem = new JMenuItem("Exit");
@@ -51,7 +51,7 @@ public class MainFormMenuBar extends JMenuBar {
         this.add(item);
         item.addActionListener(e -> modService.get().reloadModsFromDirs());
 
-        JMenu startXcomItem = new JMenu("Play XCOM2");
+        JMenuItem startXcomItem = new JMenuItem("Play XCOM2");
         startXcomItem.setIcon(ImageUtils.scaleIconForMenu(ImageUtils.WOTC_ICON));
         this.add(startXcomItem);
         startXcomItem.addActionListener(e -> gameService.startGame());

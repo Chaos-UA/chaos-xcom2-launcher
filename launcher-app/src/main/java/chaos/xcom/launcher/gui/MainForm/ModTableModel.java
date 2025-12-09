@@ -31,15 +31,15 @@ public class ModTableModel extends AbstractTableModel {
 
     private final TableColumn[] columns = new TableColumn[]{
             new TableColumn<>("Active", Boolean.class, Mod::isActive),
-            new TableColumn<>("Title", String.class, Mod::getTitle),
-            new TableColumn<>("ID", String.class, Mod::getId),
-            new TableColumn<>("Status", String.class, Mod::getStatusAsString),
             new TableColumn<>("Order", Integer.class, Mod::getLoadOrder, new Function<Integer, String>() {
                 @Override
                 public String apply(Integer order) {
                     return Objects.equals(order, Mod.MOD_ORDER_DISABLED) ? "" : String.valueOf(order);
                 }
             }),
+            new TableColumn<>("Title", String.class, Mod::getTitle),
+            new TableColumn<>("ID", String.class, Mod::getId),
+            new TableColumn<>("Status", String.class, Mod::getStatusAsString),
             new TableColumn<>("Declared Dependencies", Integer.class, new Function<Mod, Integer>() {
                 @Override
                 public Integer apply(Mod mod) {
