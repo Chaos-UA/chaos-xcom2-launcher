@@ -5,6 +5,7 @@ import chaos.xcom.launcher.gui.component.XTable;
 import chaos.xcom.launcher.gui.component.event.XMouseAdapter;
 import chaos.xcom.launcher.mod.ModService;
 import chaos.xcom.launcher.mod.dto.Mod;
+import chaos.xcom.launcher.mod.dto.ModStatus;
 import chaos.xcom.launcher.util.ColorConstant;
 import jakarta.enterprise.inject.spi.CDI;
 import org.apache.commons.lang3.StringUtils;
@@ -140,12 +141,12 @@ public class ModTable extends XTable {
                     return component;
                 }
 
-                if (!mod.getStatuses().contains(Mod.Status.OK)) {
+                if (!mod.getStatuses().contains(ModStatus.OK)) {
                     if (mod.isActive()) {
                         component.setBackground(ColorConstant.ERROR.getColor());
                     } else { // not ok and not active
                         component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
-                        if (mod.getStatuses().contains(Mod.Status.DUPLICATE)) {
+                        if (mod.getStatuses().contains(ModStatus.DUPLICATE)) {
                             component.setBackground(ColorConstant.ERROR.getColor());
                         }
                     }

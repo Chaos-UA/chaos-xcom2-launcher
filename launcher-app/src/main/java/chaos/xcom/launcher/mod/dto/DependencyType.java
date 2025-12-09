@@ -1,0 +1,7 @@
+package chaos.xcom.launcher.mod.dto;
+
+public enum DependencyType {
+    REQUIRED,
+    REPLACED,
+    INCOMPATIBLE
+}

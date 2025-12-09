@@ -26,7 +26,7 @@
             </constraints>
             <properties>
               <orientation value="0"/>
-              <resizeWeight value="0.5"/>
+              <resizeWeight value="1.0"/>
             </properties>
             <border type="none"/>
             <children>

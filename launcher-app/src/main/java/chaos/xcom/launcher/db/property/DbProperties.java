@@ -41,13 +41,33 @@ public class DbProperties extends AbstractProperties {
         return new File(userGameConfigDir.get() + "/XComGame/Config/XComModOptions.ini");
     }
 
+    public File getPossibleGameModDir() {
+        File gameExeFile = gameExe.optional().map(File::new).orElse(null);
+        if (gameExeFile != null && gameExeFile.isFile()) {
+            try {
+                File modDir = new File(gameExeFile.getParentFile().getParentFile().getParentFile() + "/XComGame/Mods");
+                if (modDir.isDirectory()) {
+                    return modDir;
+                }
+            } catch (Exception e) {
+                // no logs
+            }
+        }
+        return null;
+    }
+
     public File getPossibleGameDir() {
         File gameExeFile = gameExe.optional().map(File::new).orElse(null);
-        if (gameExeFile != null) {
+        if (gameExeFile != null && gameExeFile.isFile()) {
             try {
-                if (gameExeFile.exists()) { // XCOM 2/XCom2-WarOfTheChosen/Binaries/Win64/XCom2.exe
-                    return gameExeFile.getParentFile().getParentFile().getParentFile().getParentFile();
+                File parentDir = gameExeFile.getParentFile();
+                while (parentDir != null) { // XCOM 2/XCom2-WarOfTheChosen/Binaries/Win64/XCom2.exe
+                    if (parentDir.getName().equals("XCOM 2")) {
+                        return parentDir;
+                    }
+                    parentDir = parentDir.getParentFile();
                 }
+
             } catch (Exception e) {
                 return null;
             }

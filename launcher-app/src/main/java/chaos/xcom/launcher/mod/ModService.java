@@ -7,12 +7,12 @@ import chaos.xcom.launcher.highlander.CommunityHighlanderUtils;
 import chaos.xcom.launcher.highlander.dto.HighlanderModConfig;
 import chaos.xcom.launcher.highlander.dto.HighlanderModConfig.RunOrderDeclaration;
 import chaos.xcom.launcher.highlander.dto.HighlanderRunPriorityGroup;
-import chaos.xcom.launcher.mod.dto.Mod;
+import chaos.xcom.launcher.mod.dto.*;
 import chaos.xcom.launcher.mod.dto.Mod.ModDependency;
 import chaos.xcom.launcher.mod.dto.Mod.ModLoadOrderDeclaration;
 import chaos.xcom.launcher.mod.dto.Mod.ModLoadOrderGroupDeclaration;
-import chaos.xcom.launcher.mod.dto.ModLoadOrder;
 import chaos.xcom.launcher.steam.SteamMod;
+import chaos.xcom.launcher.steam.SteamMod.SteamRequiredMod;
 import chaos.xcom.launcher.steam.SteamService;
 import chaos.xcom.launcher.steam.SteamSyncProgress;
 import chaos.xcom.launcher.util.FileUtils;
@@ -213,6 +213,8 @@ public class ModService {
             mod.clearStateForLoadOrderCalculation();
         }
         fillSteamMods(allMods);
+        // TODO fillUserRulesToMods();
+        resetModsDependencies(allMods);
         List<Mod> activeMods = new ArrayList<>();
         List<Mod> inactiveMods = new ArrayList<>();
         for (Mod mod : allMods.values()) {
@@ -239,8 +241,8 @@ public class ModService {
             for (Mod duplicateMod : mod.getDuplicateMods()) {
                 duplicateMod.setActive(false);
                 duplicateMod.setLoadOrder(mod.getLoadOrder());
-                duplicateMod.getStatuses().add(Mod.Status.DUPLICATE);
-                duplicateMod.getStatuses().add(Mod.Status.INACTIVE);
+                duplicateMod.getStatuses().add(ModStatus.DUPLICATE);
+                duplicateMod.getStatuses().add(ModStatus.INACTIVE);
                 duplicateMod.setSteamMod(mod.getSteamMod());
                 tableMods.add(duplicateMod);
             }
@@ -253,6 +255,59 @@ public class ModService {
         Thread.ofVirtual().start(System::gc); // suggest GC to free memory after recalculation
     }
 
+    private void resetModsDependencies(LinkedHashMap<String, Mod> allMods) {
+        for (Mod mod : allMods.values()) {
+            ArrayList<ModDeclaredDependency> dependencies = new ArrayList<>();
+            mod.setDeclaredDependencies(dependencies);
+
+            SteamMod steamMod = mod.getSteamMod();
+            for (SteamRequiredMod requiredSteamMod : steamMod.getRequiredSteamMods()) {
+                Mod resolvedSteamMod = steamModIdToModMap.get(requiredSteamMod.getSteamModId());
+                ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
+                declaredDependency.setMod(mod.getId());
+                if (resolvedSteamMod != null) {
+                    declaredDependency.setTargetMod(resolvedSteamMod.getId());
+                }
+                declaredDependency.setDependencyType(DependencyType.REQUIRED);
+                declaredDependency.setDeclaredInMod(mod.getId());
+                declaredDependency.setSteamRequiredMod(requiredSteamMod);
+                declaredDependency.setSource(DeclarationSource.STEAM);
+                dependencies.add(declaredDependency);
+            }
+
+            HighlanderModConfig highlanderModConfig = mod.getHighlanderModsConfig().getModConfigs().get(mod.getId());
+            for (String requiredModId : highlanderModConfig.getRequiredMods()) {
+                ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
+                declaredDependency.setMod(mod.getId());
+                declaredDependency.setTargetMod(requiredModId);
+                declaredDependency.setDependencyType(DependencyType.REQUIRED);
+                declaredDependency.setDeclaredInMod(mod.getId());
+                declaredDependency.setSource(DeclarationSource.HIGHLANDER);
+                dependencies.add(declaredDependency);
+            }
+            for (String incompatibleModId : highlanderModConfig.getIncompatibleMods()) {
+                ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
+                declaredDependency.setMod(mod.getId());
+                declaredDependency.setTargetMod(incompatibleModId);
+                declaredDependency.setDependencyType(DependencyType.INCOMPATIBLE);
+                declaredDependency.setDeclaredInMod(mod.getId());
+                declaredDependency.setSource(DeclarationSource.HIGHLANDER);
+                dependencies.add(declaredDependency);
+            }
+            for (String ignoredRequiredModId : highlanderModConfig.getIgnoreRequiredMods()) {
+                ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
+                declaredDependency.setMod(mod.getId());
+                declaredDependency.setTargetMod(ignoredRequiredModId);
+                declaredDependency.setDependencyType(DependencyType.REPLACED);
+                declaredDependency.setDeclaredInMod(mod.getId());
+                declaredDependency.setSource(DeclarationSource.HIGHLANDER);
+                dependencies.add(declaredDependency);
+            }
+
+            // todo user declarations
+        }
+    }
+
     void recalculateModsStatuses() {
         for (Mod mod : allMods.values()) {
             recalculateModStatus(mod);
@@ -260,16 +315,16 @@ public class ModService {
     }
 
     void recalculateModStatus(Mod mod) {
-        TreeSet<Mod.Status> modStatuses = new TreeSet<>();
+        TreeSet<ModStatus> modStatuses = new TreeSet<>();
 
         if (!mod.isActive()) {
-            modStatuses.add(Mod.Status.INACTIVE);
+            modStatuses.add(ModStatus.INACTIVE);
         }
         if (!mod.isExist()) {
-            modStatuses.add(Mod.Status.DELETED);
+            modStatuses.add(ModStatus.DELETED);
         }
         if (!mod.getCycleMods().isEmpty()) {
-            modStatuses.add(Mod.Status.CYCLIC_DEPENDENCY);
+            modStatuses.add(ModStatus.CYCLIC_DEPENDENCY);
         }
 
         for (ModDependency modDependency : mod.getDependencies()) {
@@ -278,23 +333,23 @@ public class ModService {
             }
 
             Mod targetMod = allMods.get(modDependency.getTargetMod());
-            if (modDependency.getDependencyType() == Mod.DependencyType.REQUIRED
+            if (modDependency.getDependencyType() == DependencyType.REQUIRED
                     && (targetMod == null || !targetMod.isActive())) {
-                modStatuses.add(Mod.Status.REQUIRE_DEPENDENCY);
+                modStatuses.add(ModStatus.REQUIRE_DEPENDENCY);
                 modDependency.setHasError(true);
-            } else if (modDependency.getDependencyType() == Mod.DependencyType.INCOMPATIBLE
+            } else if (modDependency.getDependencyType() == DependencyType.INCOMPATIBLE
                     && targetMod != null && targetMod.isActive()) {
-                modStatuses.add(Mod.Status.INCOMPATIBLE_DEPENDENCY);
+                modStatuses.add(ModStatus.INCOMPATIBLE_DEPENDENCY);
                 modDependency.setHasError(true);
             }
         }
 
         if (!hasAllSteamRequiredModsInfos(mod)) {
-            modStatuses.add(Mod.Status.MISSING_REQUIRED_STEAM_MOD);
+            modStatuses.add(ModStatus.MISSING_REQUIRED_STEAM_MOD);
         }
 
         if (modStatuses.isEmpty()) {
-            modStatuses.add(Mod.Status.OK);
+            modStatuses.add(ModStatus.OK);
         }
         mod.setStatuses(modStatuses);
     }
@@ -453,7 +508,7 @@ public class ModService {
                     dependency.setMod(mod.getId());
                     dependency.setDeclaredInMod(declaredInMod.getId());
                     dependency.setTargetMod(ignoreRequiredMod);
-                    dependency.setDependencyType(Mod.DependencyType.REPLACED);
+                    dependency.setDependencyType(DependencyType.REPLACED);
                     mod.addDependency(dependency);
                 }
 
@@ -462,7 +517,7 @@ public class ModService {
                     dependency.setMod(mod.getId());
                     dependency.setDeclaredInMod(declaredInMod.getId());
                     dependency.setTargetMod(requiredMod);
-                    dependency.setDependencyType(Mod.DependencyType.REQUIRED);
+                    dependency.setDependencyType(DependencyType.REQUIRED);
                     mod.addDependency(dependency);
 
                     Collection<String> modsIgnoredRequiredMod = requiredModIgnoredByAlternativeModsMap.get(requiredMod);
@@ -475,7 +530,7 @@ public class ModService {
                             dep2.setMod(mod.getId());
                             dep2.setDeclaredInMod(modIgnoredRequiredMod); // todo not correct, but not really needed and can be fixed later
                             dep2.setTargetMod(modIgnoredRequiredMod);
-                            dep2.setDependencyType(Mod.DependencyType.REQUIRED);
+                            dep2.setDependencyType(DependencyType.REQUIRED);
                             mod.addDependency(dep2);
                         }
                     }
@@ -486,7 +541,7 @@ public class ModService {
                     dependency.setMod(mod.getId());
                     dependency.setDeclaredInMod(declaredInMod.getId());
                     dependency.setTargetMod(incompatibleMod);
-                    dependency.setDependencyType(Mod.DependencyType.INCOMPATIBLE);
+                    dependency.setDependencyType(DependencyType.INCOMPATIBLE);
                     mod.addDependency(dependency);
                 }
             }

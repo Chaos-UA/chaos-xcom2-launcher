@@ -4,6 +4,7 @@ import chaos.xcom.launcher.gui.component.TableColumn;
 import chaos.xcom.launcher.gui.component.XTable;
 import chaos.xcom.launcher.gui.component.event.XTableModel;
 import chaos.xcom.launcher.mod.ModService;
+import chaos.xcom.launcher.mod.dto.DependencyType;
 import chaos.xcom.launcher.mod.dto.Mod;
 import chaos.xcom.launcher.mod.dto.Mod.ModDependency;
 import chaos.xcom.launcher.util.ColorConstant;
@@ -88,7 +89,7 @@ public class ModDependenciesTable extends XTable {
     @Data
     public static class ModDependenciesTableRow {
         private String modId;
-        private Mod.DependencyType dependencyType;
+        private DependencyType dependencyType;
         private String targetModId;
         private String declaredInModId;
         private String overriddenByModId;
@@ -105,7 +106,7 @@ public class ModDependenciesTable extends XTable {
         private static TableColumn[] createTableColumns() {
             return new TableColumn[]{
                     new TableColumn<>("Mod ID", String.class, ModDependenciesTableRow::getModId),
-                    new TableColumn<>("Dependency", Mod.DependencyType.class, ModDependenciesTableRow::getDependencyType),
+                    new TableColumn<>("Dependency", DependencyType.class, ModDependenciesTableRow::getDependencyType),
                     new TableColumn<>("Target Mod ID", String.class, ModDependenciesTableRow::getTargetModId),
                     new TableColumn<>("Declared in Mod ID", String.class, ModDependenciesTableRow::getDeclaredInModId),
                     new TableColumn<>("Overridden by Mod ID", String.class, ModDependenciesTableRow::getOverriddenByModId)

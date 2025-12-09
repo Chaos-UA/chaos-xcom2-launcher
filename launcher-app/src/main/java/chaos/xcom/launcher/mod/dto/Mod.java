@@ -33,7 +33,7 @@ public class Mod {
      */
     private Long size;
     private File directory;
-    private Set<Mod.Status> statuses = new LinkedHashSet<>();
+    private Set<ModStatus> statuses = new LinkedHashSet<>();
     /**
      * Order at which to load mods on game start.
      * To guaranty order, special symbolic links will be created with names alphabetically sorted, that game recognize.
@@ -49,7 +49,7 @@ public class Mod {
     /**
      * TODO
      */
-    private List<ModDependency> declaredDependencies = new ArrayList<>();
+    private List<ModDeclaredDependency> declaredDependencies = new ArrayList<>();
     /**
      * TODO
      */
@@ -59,53 +59,6 @@ public class Mod {
     private List<ModDependency> dependencies = new ArrayList<>();
     private List<ModLoadOrderGroupDeclaration> loadOrderGroups = new ArrayList<>();
     private List<ModLoadOrderDeclaration> loadOrders = new ArrayList<>();
-
-    public List<ModDeclaredDependency> getDeclaredDependencies() {
-        ArrayList<ModDeclaredDependency> result = new ArrayList<>();
-
-        // todo user declarations
-
-        for (String requiredSteamModId : steamMod.getRequiredSteamMods().stream().map(SteamMod.SteamRequiredMod::getSteamModId).toList()) {
-            ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
-            declaredDependency.setMod(this.getId());
-            declaredDependency.setTargetMod(requiredSteamModId);
-            declaredDependency.setDependencyType(DependencyType.REQUIRED);
-            declaredDependency.setDeclaredInMod(this.getId());
-            declaredDependency.setSource(DeclarationSource.STEAM);
-            result.add(declaredDependency);
-        }
-
-        HighlanderModConfig highlanderModConfig = highlanderModsConfig.getModConfigs().get(this.getId());
-        for (String requiredModId : highlanderModConfig.getRequiredMods()) {
-            ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
-            declaredDependency.setMod(this.getId());
-            declaredDependency.setTargetMod(requiredModId);
-            declaredDependency.setDependencyType(DependencyType.REQUIRED);
-            declaredDependency.setDeclaredInMod(this.getId());
-            declaredDependency.setSource(DeclarationSource.HIGHLANDER);
-            result.add(declaredDependency);
-        }
-        for (String incompatibleModId : highlanderModConfig.getIncompatibleMods()) {
-            ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
-            declaredDependency.setMod(this.getId());
-            declaredDependency.setTargetMod(incompatibleModId);
-            declaredDependency.setDependencyType(DependencyType.INCOMPATIBLE);
-            declaredDependency.setDeclaredInMod(this.getId());
-            declaredDependency.setSource(DeclarationSource.HIGHLANDER);
-            result.add(declaredDependency);
-        }
-        for (String ignoredRequiredModId : highlanderModConfig.getIgnoreRequiredMods()) {
-            ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
-            declaredDependency.setMod(this.getId());
-            declaredDependency.setTargetMod(ignoredRequiredModId);
-            declaredDependency.setDependencyType(DependencyType.REPLACED);
-            declaredDependency.setDeclaredInMod(this.getId());
-            declaredDependency.setSource(DeclarationSource.HIGHLANDER);
-            result.add(declaredDependency);
-        }
-
-        return result;
-    }
 
     public void addLoadOrderGroupDeclaration(ModLoadOrderGroupDeclaration loadOrderGroupDeclaration) {
         for (ModLoadOrderGroupDeclaration prevLoadOrder : loadOrderGroups) {
@@ -163,8 +116,6 @@ public class Mod {
         return this.statuses.stream().map(Enum::toString).collect(Collectors.joining(", "));
     }
 
-
-
     @Data
     public static class ModLoadOrderGroupDeclaration {
         private HighlanderRunPriorityGroup modLoadOrderGroup;
@@ -190,31 +141,6 @@ public class Mod {
         private String declaredInMod;
         private String overriddenByMod;
         private boolean hasError;
-    }
-
-    @Data
-    public static class ModDeclaredDependency {
-        private String mod;
-        private DependencyType dependencyType;
-        private String targetMod;
-        private String declaredInMod;
-        private DeclarationSource source;
-    }
-
-    public static enum DependencyType {
-        REQUIRED,
-        REPLACED,
-        INCOMPATIBLE
-    }
-
-    public static enum Status {
-        OK,
-        INACTIVE,
-        DELETED,
-        REQUIRE_DEPENDENCY,
-        INCOMPATIBLE_DEPENDENCY,
-        DUPLICATE,
-        MISSING_REQUIRED_STEAM_MOD, CYCLIC_DEPENDENCY
     }
 
 }

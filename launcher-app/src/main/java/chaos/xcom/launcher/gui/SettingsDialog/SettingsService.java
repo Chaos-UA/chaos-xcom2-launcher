@@ -35,12 +35,17 @@ public class SettingsService {
                 }
                 File f = gameDirFile.getParentFile();
                 if (f != null && f.getParent() != null) {
-                    File steamXcomModsDir = new File(f.getParent() + File.separator + "workshop"
+                    File steamWorkshopXcomModsDir = new File(f.getParent() + File.separator + "workshop"
                             + File.separator + "content" + File.separator + STEAM_XCOM_GAME_ID);
-                    if (steamXcomModsDir.exists()) {
-                        dbProps.modDirsForSearch.addUnique(steamXcomModsDir.getAbsolutePath());
-                        log.info("Auto added steam mods dir: {}", steamXcomModsDir.getAbsolutePath());
+                    if (steamWorkshopXcomModsDir.exists()) {
+                        dbProps.modDirsForSearch.addUnique(steamWorkshopXcomModsDir.getAbsolutePath());
+                        log.info("Auto added steam workshop mods dir: {}", steamWorkshopXcomModsDir.getAbsolutePath());
                     }
+                }
+                f = dbProps.getPossibleGameModDir();
+                if (f != null) {
+                    dbProps.modDirsForSearch.addUnique(f.getAbsolutePath());
+                    log.info("Auto added steam XCOM 2 mod dir: {}", f.getAbsolutePath());
                 }
             } catch (Exception e) {
                 log.warn("Failed to auto add steam mods dir by: {}", gameExe, e);

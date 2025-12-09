@@ -116,13 +116,6 @@ public class SwingService {
 
             }
         });
-
-        window.addWindowListener(new WindowAdapter() {
-            @Override
-            public void windowClosed(WindowEvent e) {
-                lastActiveWindow = null;
-            }
-        });
     }
 
     // ---------------------------
