@@ -22,6 +22,8 @@ CREATE TABLE mod
     id           TEXT PRIMARY KEY,
     title        TEXT,
     active       BOOLEAN NOT NULL DEFAULT FALSE,
+    directory    TEXT NOT NULL,
+    size_bytes   INTEGER NULL,
     steam_mod_id TEXT
 );
 CREATE INDEX idx_mod_steam__id ON mod (steam_mod_id);

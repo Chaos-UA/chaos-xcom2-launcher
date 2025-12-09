@@ -59,10 +59,10 @@ public class XTableModel<T> extends AbstractTableModel {
                 tbl.getColumnModel().getColumn(i).setCellRenderer(new DefaultTableCellRenderer() {
                     @Override
                     protected void setValue(Object value) {
-                        if (value == null) {
-                            super.setValue(value);
-                        } else {
+                        try {
                             setText(renderAs.apply(value));
+                        } catch (Exception e) {
+                            super.setValue(value);
                         }
                     }
                 });

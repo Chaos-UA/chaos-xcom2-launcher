@@ -1,5 +1,6 @@
 package chaos.xcom.launcher.gui.MainForm;
 
+import chaos.xcom.launcher.swing.SwingService;
 import jakarta.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
 
@@ -10,7 +11,7 @@ import javax.swing.*;
 public class MainFormService {
 
     public void exitApp() {
-        int result = JOptionPane.showConfirmDialog(null,
+        int result = JOptionPane.showConfirmDialog(SwingService.getLastActiveWindowBounds(),
                 "Exit application?",
                 "Exit confirmation",
                 JOptionPane.YES_NO_OPTION);

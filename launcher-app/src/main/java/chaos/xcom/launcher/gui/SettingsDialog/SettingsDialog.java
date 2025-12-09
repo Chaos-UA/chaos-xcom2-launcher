@@ -3,6 +3,7 @@ package chaos.xcom.launcher.gui.SettingsDialog;
 import chaos.xcom.launcher.db.property.DbProperties;
 import chaos.xcom.launcher.gui.LookAndFeelService;
 import chaos.xcom.launcher.mod.ModService;
+import chaos.xcom.launcher.steam.SteamService;
 import chaos.xcom.launcher.swing.SwingService;
 import chaos.xcom.launcher.util.XComUtils;
 import com.intellij.uiDesigner.core.GridConstraints;
@@ -129,9 +130,12 @@ public class SettingsDialog extends JDialog {
                 });
             }
             chooser.setDialogTitle("Select XCOM executable file (usually XCom2-WarOfTheChosen/Binaries/Win64/XCom2.exe)");
-            dbProps.gameExe.optional().ifPresent(exeFile -> {
+            String exeFile = dbProps.gameExe.optional().orElse(null);
+            if (exeFile == null) {
+                chooser.setCurrentDirectory(SteamService.findXcomGameExeDirectory().orElse(null));
+            } else {
                 chooser.setCurrentDirectory(new File(exeFile).getParentFile());
-            });
+            }
             int result = chooser.showOpenDialog(this);
             if (result == JFileChooser.APPROVE_OPTION) {
                 File selectedDir = chooser.getSelectedFile();

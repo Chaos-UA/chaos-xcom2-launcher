@@ -16,10 +16,8 @@ import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableRowSorter;
-import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 import java.util.function.Function;
 
 @Slf4j
@@ -154,10 +152,10 @@ public class ModTableModel extends AbstractTableModel {
                 tbl.getColumnModel().getColumn(i).setCellRenderer(new DefaultTableCellRenderer() {
                     @Override
                     protected void setValue(Object value) {
-                        if (value == null) {
-                            super.setValue(value);
-                        } else {
+                        try {
                             setText(renderAs.apply(value));
+                        } catch (Exception e) {
+                            super.setValue(value);
                         }
                     }
                 });

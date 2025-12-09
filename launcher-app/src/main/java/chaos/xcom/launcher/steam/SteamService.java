@@ -4,16 +4,21 @@ import chaos.db.gen.tables.records.SteamModRecord;
 import chaos.xcom.launcher.common.JsonConverter;
 import chaos.xcom.launcher.event.EventPublisher;
 import chaos.xcom.launcher.steam.SteamMod.SteamRequiredMod;
+import chaos.xcom.launcher.util.OsUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.annotation.PostConstruct;
 import jakarta.inject.Singleton;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.io.LineIterator;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
+import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
@@ -161,7 +166,7 @@ public class SteamService {
             long startTime = System.currentTimeMillis();
             Document doc = Jsoup.connect(formatModPageUrl(steamModId))
                     .userAgent("Mozilla/5.0 (Wayland; Linux x86_64)")
-                    .timeout(10_000)
+                    .timeout(30_000)
                     .get();
 
             Element titleEl = doc.selectFirst(".workshopItemTitle");
@@ -222,6 +227,29 @@ public class SteamService {
             log.error("Failed to parse steam mod page: {}", steamModId, e);
             return Optional.empty();
         }
+    }
+
+    public static Optional<File> findXcomGameExeDirectory() {
+        if (OsUtils.IS_WINDOWS) {
+            try {
+                Process process = new ProcessBuilder("reg", "query",
+                        "HKCU\\Software\\Valve\\Steam", "/v", "SteamPath").start();
+
+                LineIterator iterator = IOUtils.lineIterator(process.getInputStream(), StandardCharsets.UTF_8);
+                while (iterator.hasNext()) {
+                    String line = iterator.next().trim();
+                    if (line.contains("SteamPath")) {
+                        String path = line.split("    ")[line.split("    ").length - 1].trim();
+                        log.info("Found SteamPath: {}", path);
+                        String exeDir = path + "/steamapps/common/XCOM 2/XCom2-WarOfTheChosen/Binaries/Win64";
+                        return Optional.of(new File(exeDir));
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Failed to find Steam exe directory", e);
+            }
+        }
+        return Optional.empty();
     }
 
 }

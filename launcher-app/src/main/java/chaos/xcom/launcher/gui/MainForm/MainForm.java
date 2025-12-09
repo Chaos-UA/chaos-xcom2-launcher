@@ -54,7 +54,6 @@ public class MainForm extends JFrame {
 
     @PostConstruct
     public void init() {
-        JOptionPane.setRootFrame(this);
         setTitle("XCOM Chaos Mod Launcher 1.0.0");
         this.setIconImage(ImageUtils.WOTC_ICON.getImage());
         this.addWindowListener(new WindowAdapter() {
@@ -132,20 +131,14 @@ public class MainForm extends JFrame {
 
     void exitApp() {
         log.info("Exit app");
-        try {
-            getModService().saveAllModsToDb();
-        } catch (Exception e) {
-            log.error("Error during exit app", e);
-        } finally {
-            System.exit(0);
-        }
+        System.exit(0);
     }
 
     private ModService getModService() {
         return CDI.current().select(ModService.class).get();
     }
 
-    public void updateMods(List<Mod> parsedMods) {
+    public void setMods(List<Mod> parsedMods) {
         Mod currentSelectedMod = selectedMod;
         tblModsList.setMods(parsedMods);
         selectModIfExist(currentSelectedMod);
@@ -159,11 +152,14 @@ public class MainForm extends JFrame {
 
     private void selectModIfExist(Mod mod) {
         if (mod != null) {
-            int modIndex = tblModsList.getModel().getMods().indexOf(mod);
-            if (modIndex >= 0) {
-                int convertRowIndexToView = tblModsList.convertRowIndexToView(modIndex);
-                tblModsList.getSelectionModel().setSelectionInterval(convertRowIndexToView, convertRowIndexToView);
-                tblModsList.scrollRowToVisible(convertRowIndexToView);
+            List<Mod> mods = tblModsList.getModel().getMods();
+            for (int i = 0; i < mods.size(); i++) {
+                if (mods.get(i).getId().equals(mod.getId())) {
+                    int convertRowIndexToView = tblModsList.convertRowIndexToView(i);
+                    tblModsList.getSelectionModel().setSelectionInterval(convertRowIndexToView, convertRowIndexToView);
+                    tblModsList.scrollRowToVisible(convertRowIndexToView);
+                    break;
+                }
             }
         }
     }

@@ -28,7 +28,10 @@ public class Mod {
 
     @Getter(AccessLevel.NONE) @Setter(AccessLevel.NONE)
     private Boolean exist;
-    private long size;
+    /**
+     * Mod directory size in bytes.
+     */
+    private Long size;
     private File directory;
     private Set<Mod.Status> statuses = new LinkedHashSet<>();
     /**

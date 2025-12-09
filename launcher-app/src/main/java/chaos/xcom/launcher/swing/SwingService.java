@@ -1,6 +1,7 @@
 package chaos.xcom.launcher.swing;
 
 import chaos.xcom.launcher.db.property.DbProperties;
+import io.quarkus.runtime.Startup;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.inject.Singleton;
@@ -9,18 +10,23 @@ import lombok.extern.slf4j.Slf4j;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
+import java.awt.event.*;
 import java.util.Map;
 
 @Slf4j
 @Singleton
+@Startup
 @RequiredArgsConstructor
 public class SwingService {
+
+    private static Window lastActiveWindow;
 
     private final DbProperties dbProps;
     private SwingComponentStates componentStates = new SwingComponentStates();
 
+    public static Window getLastActiveWindowBounds() {
+        return lastActiveWindow;
+    }
 
     @PostConstruct
     public void loadAllStates() {
@@ -84,16 +90,37 @@ public class SwingService {
             window.setBounds(r.toAwtRectangle());
             log.debug("{} {} restored bounds: {}", window.getClass().getSimpleName(), key, r);
         }
-
         window.addComponentListener(new ComponentAdapter() {
             @Override
             public void componentMoved(ComponentEvent e) {
-                windowBounds.put(key, Rectangle.from(window.getBounds()));
+                updateBounds();
             }
 
             @Override
             public void componentResized(ComponentEvent e) {
+                updateBounds();
+            }
+
+            void updateBounds() {
                 windowBounds.put(key, Rectangle.from(window.getBounds()));
+            }
+        });
+        window.addWindowFocusListener(new WindowFocusListener() {
+            @Override
+            public void windowGainedFocus(WindowEvent e) {
+                lastActiveWindow = window;
+            }
+
+            @Override
+            public void windowLostFocus(WindowEvent e) {
+
+            }
+        });
+
+        window.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosed(WindowEvent e) {
+                lastActiveWindow = null;
             }
         });
     }

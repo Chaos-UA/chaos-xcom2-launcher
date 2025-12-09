@@ -21,6 +21,7 @@ import chaos.xcom.launcher.util.SortUtils.SortItem;
 import chaos.xcom.launcher.util.SortUtils.SortResult;
 import chaos.xcom.launcher.util.XComModFinderUtils;
 import chaos.xcom.launcher.util.XComUtils;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.event.ObservesAsync;
 import jakarta.inject.Singleton;
 import lombok.RequiredArgsConstructor;
@@ -69,10 +70,33 @@ public class ModService {
         recalculateModDependencies();
     }
 
+    @PreDestroy
+    public void saveAll() {
+        saveAllModsToDb();
+    }
+
     private void saveModToDb(Mod mod) {
         ModRecord modDbRecord = toDbModRecord(mod);
         modRepository.save(modDbRecord);
         log.info("Saved mod {} to DB", mod.getId());
+    }
+
+    private List<Mod> getAllModsIncludingIgnoredDuplicates() {
+        List<Mod> result = new ArrayList<>(allMods.values().size());
+        for (Mod mod : allMods.values()) {
+            result.add(mod);
+            result.addAll(mod.getDuplicateMods());
+        }
+        return result;
+    }
+
+    public void calculateAllModsSizeAndSave() {
+        for (Mod mod : getAllModsIncludingIgnoredDuplicates()) {
+            mod.setSize(FileUtils.calculateDirectorySize(mod.getDirectory()).orElse(null));
+        }
+        saveAllModsToDb();
+        log.info("All {} mods size have been calculated and saved to DB", allMods.size());
+        mainForm.onMainTableDataChange();
     }
 
     public void saveAllModsToDb() {
@@ -86,6 +110,8 @@ public class ModService {
         modDbRecord.setId(mod.getId());
         modDbRecord.setTitle(mod.getTitle());
         modDbRecord.setActive(mod.isActive());
+        modDbRecord.setDirectory(mod.getDirectory().getAbsolutePath());
+        modDbRecord.setSizeBytes(mod.getSize());
         SteamMod steamMod = mod.getSteamMod();
         if (steamMod != null) {
             modDbRecord.setSteamModId(steamMod.getSteamModId());
@@ -220,7 +246,7 @@ public class ModService {
             }
         }
 
-        mainForm.updateMods(tableMods);
+        mainForm.setMods(tableMods);
         if (dbProps.syncMissingSteamModsOnReload.get()) {
             this.syncMissingSteamMods();
         }
@@ -589,7 +615,12 @@ public class ModService {
                 mod = new Mod();
                 mod.setId(modDbRecord.getId());
                 mod.setTitle(modDbRecord.getTitle());
+                mod.setDirectory(new File(modDbRecord.getDirectory()));
                 map.put(modDbRecord.getId(), mod);
+            } else {
+                if (new File(modDbRecord.getDirectory()).equals(mod.getDirectory())) {
+                    mod.setSize(modDbRecord.getSizeBytes());
+                }
             }
             if (modDbRecord.getSteamModId() != null) {
                 mod.getSteamMod().setSteamModId(modDbRecord.getSteamModId());
@@ -661,7 +692,7 @@ public class ModService {
             //mod.setDescription(parseModProp("Description", props));
             mod.setRequiresXPACK("true".equalsIgnoreCase(parseModProp("RequiresXPACK", props)));
             //mod.setTags(parseModProp("Tags", props));
-            mod.setSize(FileUtils.getDirectorySize(modFile.getParentFile().toPath()));
+            //mod.setSize(FileUtils.calculateDirectorySize(modFile.getParentFile().toPath()));
             mod.setDirectory(modFile.getParentFile().getAbsoluteFile());
             if (isSteamWorkshopMod) {
                 try {

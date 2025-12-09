@@ -1,6 +1,7 @@
 package chaos.xcom.launcher.gui;
 
 import chaos.xcom.launcher.db.property.DbProperties;
+import chaos.xcom.launcher.swing.SwingService;
 import com.formdev.flatlaf.*;
 import com.formdev.flatlaf.intellijthemes.FlatAllIJThemes;
 import com.formdev.flatlaf.themes.FlatMacDarkLaf;
@@ -64,7 +65,8 @@ public class LookAndFeelService {
             });
         } catch (Exception e) {
             log.error("Failed to apply GUI skin: {}", className, e);
-            JOptionPane.showMessageDialog(null, "Failed to apply GUI skin: " + className, "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(SwingService.getLastActiveWindowBounds(),
+                    "Failed to apply GUI skin: " + className, "Error", JOptionPane.ERROR_MESSAGE);
         }
     }
 

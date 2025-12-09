@@ -10,6 +10,8 @@ import jakarta.inject.Singleton;
 import lombok.RequiredArgsConstructor;
 
 import javax.swing.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 
 @Singleton
 @RequiredArgsConstructor
@@ -22,12 +24,21 @@ public class MainFormMenuBar extends JMenuBar {
 
     @PostConstruct
     public void init() {
-        JMenu fileMenu = new JMenu("File");
+        JMenu fileMenu = new JMenu("Launcher");
 
         JMenuItem settingsItem = new JMenuItem("Settings");
         fileMenu.add(settingsItem);
         settingsItem.addActionListener(e -> settingsService.openSettingsDialog());
 
+        fileMenu.addSeparator();
+
+        JMenuItem calculateModsSize = new JMenuItem("Calculate mods size");
+        calculateModsSize.addActionListener(e -> {
+            modService.get().calculateAllModsSizeAndSave();
+        });
+        fileMenu.add(calculateModsSize);
+
+        fileMenu.addSeparator();
         JMenuItem syncAllSteamMods = new JMenuItem("Sync info from steam for all mods");
         fileMenu.add(syncAllSteamMods);
         syncAllSteamMods.addActionListener(e -> modService.get().syncAllSteamMods());

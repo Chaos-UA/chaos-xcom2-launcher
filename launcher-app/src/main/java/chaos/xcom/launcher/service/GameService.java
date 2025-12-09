@@ -4,6 +4,7 @@ import chaos.xcom.launcher.db.property.DbProperties;
 import chaos.xcom.launcher.exception.InternalException;
 import chaos.xcom.launcher.mod.ModService;
 import chaos.xcom.launcher.mod.dto.Mod;
+import chaos.xcom.launcher.swing.SwingService;
 import chaos.xcom.launcher.util.FileUtils;
 import chaos.xcom.launcher.util.OsUtils;
 import chaos.xcom.launcher.util.XComIniUtils;
@@ -31,7 +32,7 @@ public class GameService {
         File exeFile = new File(dbProps.gameExe.optional().orElse(""));
         if (!exeFile.exists()) {
             log.info("XCOM exe file doesn't exist: {}", exeFile);
-            JOptionPane.showMessageDialog(null,
+            JOptionPane.showMessageDialog(SwingService.getLastActiveWindowBounds(),
                     "XCOM exe file doesn't exist: " + exeFile.getAbsolutePath(), "Error",
                     JOptionPane.ERROR_MESSAGE);
             process.destroy();
@@ -39,7 +40,7 @@ public class GameService {
         }
         if (process != null && process.isAlive()) {
             log.info("XCOM game is already running with PID: {}", process.pid());
-            int result = JOptionPane.showConfirmDialog(null,
+            int result = JOptionPane.showConfirmDialog(SwingService.getLastActiveWindowBounds(),
                     "XCOM game is already running. PID: " + process.pid()
                             + ".\nKill process and start?", "Info",
                     JOptionPane.YES_NO_OPTION);
@@ -54,7 +55,7 @@ public class GameService {
                         process.waitFor(5, TimeUnit.SECONDS);
                     } catch (InterruptedException ex) {
                         log.error("Interrupted while waiting for XCOM process to terminate forcibly", ex);
-                        JOptionPane.showMessageDialog(null,
+                        JOptionPane.showMessageDialog(SwingService.getLastActiveWindowBounds(),
                                 "Failed to terminate XCOM process forcibly. PID: " + process.pid(),
                                 "Error", JOptionPane.ERROR_MESSAGE);
                         return;
@@ -86,7 +87,7 @@ public class GameService {
             }
         } catch (Exception e) {
             log.error("Failed to start XCOM: {}", exeFile, e);
-            JOptionPane.showMessageDialog(null,
+            JOptionPane.showMessageDialog(SwingService.getLastActiveWindowBounds(),
                     "Failed to start XCOM: " + exeFile.getAbsolutePath() +
                             "\nError: " + e, "Error",
                     JOptionPane.ERROR_MESSAGE);
@@ -113,7 +114,7 @@ public class GameService {
                     "[Engine.XComModOptions]",
                     modIds.stream().map(modId -> "ActiveMods=" + modId).toList());
         } catch (Exception e) {
-            JOptionPane.showMessageDialog(null,
+            JOptionPane.showMessageDialog(SwingService.getLastActiveWindowBounds(),
                     "Failed to prepare configs in:\n" + dbProps.userGameConfigDir.get()
                             + "\nError:\n" + e, "Error",
                     JOptionPane.ERROR_MESSAGE);
@@ -139,7 +140,7 @@ public class GameService {
 
     void deleteAllLinksFromDir(File targetDir) {
         if (!targetDir.isDirectory()) {
-            JOptionPane.showMessageDialog(null,
+            JOptionPane.showMessageDialog(SwingService.getLastActiveWindowBounds(),
                     "Invalid temp mods directory:\n" + targetDir, "Error",
                     JOptionPane.ERROR_MESSAGE);
         }
@@ -153,7 +154,7 @@ public class GameService {
         try {
             Files.delete(targetLinkPath.toPath());
         } catch (Exception e) {
-            JOptionPane.showMessageDialog(null,
+            JOptionPane.showMessageDialog(SwingService.getLastActiveWindowBounds(),
                     "Failed to delete link:" + targetLinkPath, "Error",
                     JOptionPane.ERROR_MESSAGE);
             throw new InternalException("Failed to delete link: " + targetLinkPath).cause(e);
@@ -181,7 +182,7 @@ public class GameService {
             }
             Files.createSymbolicLink(targetLinkPath.toPath(), existingDir.toPath());
         } catch (Exception e) {
-            JOptionPane.showMessageDialog(null,
+            JOptionPane.showMessageDialog(SwingService.getLastActiveWindowBounds(),
                     "Failed to create symbolic link for the mod:\n" + existingDir.getAbsolutePath()
                             + "\nat this location:\n" + targetLinkPath.getAbsolutePath()
                             + "\nError: " + e, "Error",
