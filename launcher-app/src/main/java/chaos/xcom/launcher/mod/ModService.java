@@ -8,7 +8,6 @@ import chaos.xcom.launcher.highlander.dto.HighlanderModConfig;
 import chaos.xcom.launcher.highlander.dto.HighlanderModConfig.RunOrderDeclaration;
 import chaos.xcom.launcher.highlander.dto.HighlanderRunPriorityGroup;
 import chaos.xcom.launcher.mod.dto.*;
-import chaos.xcom.launcher.mod.dto.Mod.ModDependency;
 import chaos.xcom.launcher.mod.dto.Mod.ModLoadOrderDeclaration;
 import chaos.xcom.launcher.mod.dto.Mod.ModLoadOrderGroupDeclaration;
 import chaos.xcom.launcher.steam.SteamMod;
@@ -23,6 +22,7 @@ import chaos.xcom.launcher.util.XComModFinderUtils;
 import chaos.xcom.launcher.util.XComUtils;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.event.ObservesAsync;
+import jakarta.enterprise.inject.spi.CDI;
 import jakarta.inject.Singleton;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -54,6 +54,19 @@ public class ModService {
     private LinkedHashMap<String, Mod> allMods = new LinkedHashMap<>();
     private HashMap<String, Mod> steamModIdToModMap = new HashMap<>();
 
+    public static ModService get() {
+        return CDI.current().select(ModService.class).get();
+    }
+
+    public void setModsActive(Collection<Mod> mods, boolean active) {
+        for (Mod mod : mods) {
+            mod.setActive(active);
+        }
+        saveModsToDb(mods);
+        log.info("{} mods is now {}", mods.size(), active ? "active" : "inactive");
+        recalculateModDependencies();
+    }
+
     public void setModActive(String modId, boolean active) {
         Mod mod = allMods.get(modId);
         if (mod == null) {
@@ -79,6 +92,12 @@ public class ModService {
         ModRecord modDbRecord = toDbModRecord(mod);
         modRepository.save(modDbRecord);
         log.info("Saved mod {} to DB", mod.getId());
+    }
+
+    private void saveModsToDb(Collection<Mod> mods) {
+        List<ModRecord> modDbRecord = mods.stream().map(v -> toDbModRecord(v)).toList();
+        modRepository.save(modDbRecord);
+        log.info("Saved {} mods to DB", mods.size());
     }
 
     private List<Mod> getAllModsIncludingIgnoredDuplicates() {
@@ -265,46 +284,46 @@ public class ModService {
                 Mod resolvedSteamMod = steamModIdToModMap.get(requiredSteamMod.getSteamModId());
                 ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
                 declaredDependency.setMod(mod.getId());
-                if (resolvedSteamMod != null) {
+                if (resolvedSteamMod == null) {
+                    declaredDependency.setHasError(true);
+                } else {
                     declaredDependency.setTargetMod(resolvedSteamMod.getId());
                 }
                 declaredDependency.setDependencyType(DependencyType.REQUIRED);
-                declaredDependency.setDeclaredInMod(mod.getId());
                 declaredDependency.setSteamRequiredMod(requiredSteamMod);
                 declaredDependency.setSource(DeclarationSource.STEAM);
                 dependencies.add(declaredDependency);
             }
 
             HighlanderModConfig highlanderModConfig = mod.getHighlanderModsConfig().getModConfigs().get(mod.getId());
-            for (String requiredModId : highlanderModConfig.getRequiredMods()) {
-                ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
-                declaredDependency.setMod(mod.getId());
-                declaredDependency.setTargetMod(requiredModId);
-                declaredDependency.setDependencyType(DependencyType.REQUIRED);
-                declaredDependency.setDeclaredInMod(mod.getId());
-                declaredDependency.setSource(DeclarationSource.HIGHLANDER);
-                dependencies.add(declaredDependency);
-            }
-            for (String incompatibleModId : highlanderModConfig.getIncompatibleMods()) {
-                ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
-                declaredDependency.setMod(mod.getId());
-                declaredDependency.setTargetMod(incompatibleModId);
-                declaredDependency.setDependencyType(DependencyType.INCOMPATIBLE);
-                declaredDependency.setDeclaredInMod(mod.getId());
-                declaredDependency.setSource(DeclarationSource.HIGHLANDER);
-                dependencies.add(declaredDependency);
-            }
-            for (String ignoredRequiredModId : highlanderModConfig.getIgnoreRequiredMods()) {
-                ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
-                declaredDependency.setMod(mod.getId());
-                declaredDependency.setTargetMod(ignoredRequiredModId);
-                declaredDependency.setDependencyType(DependencyType.REPLACED);
-                declaredDependency.setDeclaredInMod(mod.getId());
-                declaredDependency.setSource(DeclarationSource.HIGHLANDER);
-                dependencies.add(declaredDependency);
-            }
+            if (highlanderModConfig != null) {
+                for (String requiredModId : highlanderModConfig.getRequiredMods()) {
+                    ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
+                    declaredDependency.setMod(mod.getId());
+                    declaredDependency.setTargetMod(requiredModId);
+                    declaredDependency.setDependencyType(DependencyType.REQUIRED);
+                    declaredDependency.setSource(DeclarationSource.HIGHLANDER);
+                    dependencies.add(declaredDependency);
+                }
+                for (String incompatibleModId : highlanderModConfig.getIncompatibleMods()) {
+                    ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
+                    declaredDependency.setMod(mod.getId());
+                    declaredDependency.setTargetMod(incompatibleModId);
+                    declaredDependency.setDependencyType(DependencyType.INCOMPATIBLE);
+                    declaredDependency.setSource(DeclarationSource.HIGHLANDER);
+                    dependencies.add(declaredDependency);
+                }
+                for (String ignoredRequiredModId : highlanderModConfig.getIgnoreRequiredMods()) {
+                    ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
+                    declaredDependency.setMod(mod.getId());
+                    declaredDependency.setTargetMod(ignoredRequiredModId);
+                    declaredDependency.setDependencyType(DependencyType.REPLACED);
+                    declaredDependency.setSource(DeclarationSource.HIGHLANDER);
+                    dependencies.add(declaredDependency);
+                }
 
-            // todo user declarations
+                // todo user declarations
+            }
         }
     }
 
@@ -374,7 +393,7 @@ public class ModService {
 
         //Set<String> ignoreRequiredModIds =;// mods.stream().map(v -> ).collect(Collectors.toSet());
 
-        // first use highlander root mods dependencies without meta mods dependencies
+        // first use only declared dependencies directly in mod without meta mods enhanced dependencies
         TreeMap<HighlanderRunPriorityGroup, List<Mod>> groupsMap = new TreeMap<>();
         for (Mod mod : mods) {
             HighlanderModConfig config = mod.getHighlanderModsConfig().getModConfigs().get(mod.getId());
@@ -394,10 +413,13 @@ public class ModService {
         mods = groupsMap.values().stream().flatMap(Collection::stream).collect(Collectors.toList());
         for (int i = 0; i < mods.size(); i++) {
             Mod mod = mods.get(i);
-
-            // loadOrderDeclaration.set
-            // mod.setLoadOrderGroup(ModLoadOrderGroup.NOT_SPECIFIED);
-            // = mod.getHighlanderModsConfig().getModConfigs().get(mod.getId());
+            for (ModDeclaredDependency declaredDependency : mod.getDeclaredDependencies()) {
+                if (declaredDependency.getTargetMod() == null || declaredDependency.getDependencyType() != DependencyType.REQUIRED) {
+                    continue;
+                }
+                appendLoadAfterRequiredMods(mod, declaredDependency.getTargetMod(), mod.getId(),
+                        requiredModIgnoredByAlternativeModsMap);
+            }
 
             for (int j = i; j < mods.size(); j++) {
                 Mod laterMod = mods.get(j);
@@ -411,25 +433,28 @@ public class ModService {
                         loadOrderDeclaration.setTargetMod(mod.getId());
                         mod.addLoadOrderGroupDeclaration(loadOrderDeclaration);
                     }
-                    for (String requiredMod : modConfig.getRequiredMods()) {
-                        ModLoadOrderDeclaration loadOrderDeclaration = new ModLoadOrderDeclaration();
-                        loadOrderDeclaration.setMod(mod.getId());
-                        loadOrderDeclaration.setDeclaredInMod(laterMod.getId());
-                        loadOrderDeclaration.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
-                        loadOrderDeclaration.setTargetMod(requiredMod);
-                        mod.addLoadOrderDeclaration(loadOrderDeclaration);
 
-                        LinkedHashSet<String> requiredModIgnoredByMods = requiredModIgnoredByAlternativeModsMap.getOrDefault(requiredMod, new LinkedHashSet<>());
-                        for (String requiredModIgnoredByMod : requiredModIgnoredByMods) {
-                            if (loadOrderDeclaration.getOverriddenByMod() == null) {
-                                loadOrderDeclaration.setOverriddenByMod(requiredModIgnoredByMod);
+                    if (!isCurrentMod) {
+                        for (String requiredMod : modConfig.getRequiredMods()) {
+                            ModLoadOrderDeclaration loadOrderDeclaration = new ModLoadOrderDeclaration();
+                            loadOrderDeclaration.setMod(mod.getId());
+                            loadOrderDeclaration.setDeclaredInMod(laterMod.getId());
+                            loadOrderDeclaration.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
+                            loadOrderDeclaration.setTargetMod(requiredMod);
+                            mod.addLoadOrderDeclaration(loadOrderDeclaration);
+
+                            LinkedHashSet<String> requiredModIgnoredByMods = requiredModIgnoredByAlternativeModsMap.getOrDefault(requiredMod, new LinkedHashSet<>());
+                            for (String requiredModIgnoredByMod : requiredModIgnoredByMods) {
+                                if (loadOrderDeclaration.getOverriddenByMod() == null) {
+                                    loadOrderDeclaration.setOverriddenByMod(requiredModIgnoredByMod);
+                                }
+                                ModLoadOrderDeclaration loadOrder2 = new ModLoadOrderDeclaration();
+                                loadOrder2.setMod(mod.getId());
+                                loadOrder2.setDeclaredInMod(laterMod.getId());
+                                loadOrder2.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
+                                loadOrder2.setTargetMod(requiredModIgnoredByMod);
+                                mod.addLoadOrderDeclaration(loadOrder2);
                             }
-                            ModLoadOrderDeclaration loadOrder2 = new ModLoadOrderDeclaration();
-                            loadOrder2.setMod(mod.getId());
-                            loadOrder2.setDeclaredInMod(laterMod.getId());
-                            loadOrder2.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
-                            loadOrder2.setTargetMod(requiredModIgnoredByMod);
-                            mod.addLoadOrderDeclaration(loadOrder2);
                         }
                     }
                     for (RunOrderDeclaration runOrder : modConfig.getRunOrderDeclarations()) {
@@ -465,6 +490,33 @@ public class ModService {
 
 
         return fillModsFieldsAfterLoadOrderSort(requiredModIgnoredByAlternativeModsMap, mods);
+    }
+
+    private void appendLoadAfterRequiredMods(Mod mod, String requiredModId, String declaredInMod,
+                                             LinkedHashMap<String, LinkedHashSet<String>> requiredModIgnoredByAlternativeModsMap) {
+        ModLoadOrderDeclaration loadOrderDeclaration = new ModLoadOrderDeclaration();
+        loadOrderDeclaration.setMod(mod.getId());
+        loadOrderDeclaration.setDeclaredInMod(declaredInMod);
+        loadOrderDeclaration.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
+        loadOrderDeclaration.setTargetMod(requiredModId);
+        mod.addLoadOrderDeclaration(loadOrderDeclaration);
+
+        LinkedHashSet<String> requiredModIgnoredByMods = requiredModIgnoredByAlternativeModsMap.getOrDefault(requiredModId, new LinkedHashSet<>());
+        for (String requiredModIgnoredByMod : requiredModIgnoredByMods) {
+            if (loadOrderDeclaration.getOverriddenByMod() == null) {
+                loadOrderDeclaration.setOverriddenByMod(requiredModIgnoredByMod);
+            }
+            ModLoadOrderDeclaration loadOrder2 = new ModLoadOrderDeclaration();
+            loadOrder2.setMod(mod.getId());
+            loadOrder2.setDeclaredInMod(declaredInMod);
+            loadOrder2.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
+            loadOrder2.setTargetMod(requiredModIgnoredByMod);
+            mod.addLoadOrderDeclaration(loadOrder2);
+        }
+    }
+
+    void resetModsLoadOrder() {
+
     }
 
     List<Mod> fillModsFieldsAfterLoadOrderSort(Map<String, LinkedHashSet<String>> requiredModIgnoredByAlternativeModsMap,
@@ -582,7 +634,9 @@ public class ModService {
             SortItem<String> sortItem = new SortItem<>();
             sortItem.setValue(mod.getId());
             HighlanderModConfig highlanderConfig = mod.getHighlanderModsConfig().getModConfigs().get(mod.getId());
+
             if (highlanderConfig != null) {
+                // todo
                 for (RunOrderDeclaration runOrderDeclaration : highlanderConfig.getRunOrderDeclarations()) {
                     if (runOrderDeclaration.getTargetMod() != null) {
                         if (runOrderDeclaration.getModLoadOrder().isLoadBefore()) {
@@ -592,17 +646,22 @@ public class ModService {
                         }
                     }
                 }
-                for (String requiredModId : highlanderConfig.getRequiredMods()) {
-                    if (!sortItem.getBeforeValues().contains(requiredModId)
-                            && !sortItem.getAfterValues().contains(requiredModId)) {
-                        // assume required mod should be loaded before
-                        sortItem.getBeforeValues().add(requiredModId);
-                        LinkedHashSet<String> requiredModIgnoredByMods = requiredModIgnoredByAlternativeModsMap.getOrDefault(requiredModId, new LinkedHashSet<>());
-                        for (String requiredModIgnoredByMod : requiredModIgnoredByMods) {
-                            if (!sortItem.getBeforeValues().contains(requiredModIgnoredByMod)
-                                    && !sortItem.getAfterValues().contains(requiredModIgnoredByMod)) {
-                                sortItem.getBeforeValues().add(requiredModIgnoredByMod);
-                            }
+            }
+            List<ModDeclaredDependency> declaredDependencies = mod.getDeclaredDependencies();
+            for (ModDeclaredDependency dependency : declaredDependencies) {
+                String requiredModId = dependency.getTargetMod();
+                if (requiredModId == null || dependency.getDependencyType() != DependencyType.REQUIRED) {
+                    continue;
+                }
+                if (!sortItem.getBeforeValues().contains(requiredModId)
+                        && !sortItem.getAfterValues().contains(requiredModId)) {
+                    // assume required mod should be loaded before
+                    sortItem.getBeforeValues().add(requiredModId);
+                    LinkedHashSet<String> requiredModIgnoredByMods = requiredModIgnoredByAlternativeModsMap.getOrDefault(requiredModId, new LinkedHashSet<>());
+                    for (String requiredModIgnoredByMod : requiredModIgnoredByMods) {
+                        if (!sortItem.getBeforeValues().contains(requiredModIgnoredByMod)
+                                && !sortItem.getAfterValues().contains(requiredModIgnoredByMod)) {
+                            sortItem.getBeforeValues().add(requiredModIgnoredByMod);
                         }
                     }
                 }

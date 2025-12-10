@@ -6,6 +6,7 @@ import chaos.xcom.launcher.gui.component.event.XMouseAdapter;
 import chaos.xcom.launcher.mod.ModService;
 import chaos.xcom.launcher.mod.dto.Mod;
 import chaos.xcom.launcher.mod.dto.ModStatus;
+import chaos.xcom.launcher.steam.SteamService;
 import chaos.xcom.launcher.util.ColorConstant;
 import jakarta.enterprise.inject.spi.CDI;
 import org.apache.commons.lang3.StringUtils;
@@ -59,18 +60,14 @@ public class ModTable extends XTable {
                     JMenuItem activateModsItem = new JMenuItem("Activate");
                     activateModsItem.addActionListener(ae -> {
                         ModService modService = getModService();
-                        for (Mod mod : selectedMods) {
-                            modService.setModActive(mod.getId(), true);
-                        }
+                        modService.setModsActive(selectedMods, true);
                     });
                     menu.add(activateModsItem);
 
                     JMenuItem deactivateModsItem = new JMenuItem("Deactivate");
                     deactivateModsItem.addActionListener(ae -> {
                         ModService modService = getModService();
-                        for (Mod mod : selectedMods) {
-                            modService.setModActive(mod.getId(), false);
-                        }
+                        modService.setModsActive(selectedMods, false);
                     });
                     menu.add(deactivateModsItem);
 
@@ -96,13 +93,8 @@ public class ModTable extends XTable {
                     if (!modsWithSteamId.isEmpty()) {
                         JMenuItem openSteamMod = new JMenuItem("Open mod in Steam");
                         openSteamMod.addActionListener(ae -> {
-                            try {
-                                for (Mod mod : modsWithSteamId) {
-                                    Desktop.getDesktop().browse(new URI("https://steamcommunity.com/sharedfiles/filedetails/?id=" + mod.getPublishedFileId()));
-                                }
-                            } catch (Exception ex) {
-                                throw new InternalException().cause(ex);
-                            }
+                            SteamService.openSteamModsInBrowser(modsWithSteamId.stream()
+                                    .map(v -> v.getSteamMod().getSteamModId()).toList());
                         });
                         menu.add(openSteamMod);
 

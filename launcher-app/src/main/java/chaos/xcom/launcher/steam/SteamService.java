@@ -3,6 +3,8 @@ package chaos.xcom.launcher.steam;
 import chaos.db.gen.tables.records.SteamModRecord;
 import chaos.xcom.launcher.common.JsonConverter;
 import chaos.xcom.launcher.event.EventPublisher;
+import chaos.xcom.launcher.exception.InternalException;
+import chaos.xcom.launcher.mod.dto.Mod;
 import chaos.xcom.launcher.steam.SteamMod.SteamRequiredMod;
 import chaos.xcom.launcher.util.OsUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -17,10 +19,13 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
+import java.awt.*;
 import java.io.File;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.*;
+import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -74,6 +79,22 @@ public class SteamService {
                 }
             }
         });
+    }
+
+    public static void openSteamModInBrowser(String steamModId) {
+        openSteamModsInBrowser(List.of(steamModId));
+    }
+
+    public static void openSteamModsInBrowser(Collection<String> steamModIds) {
+        try {
+            for (String steamModId : steamModIds) {
+                if (steamModId != null) {
+                    Desktop.getDesktop().browse(new URI("https://steamcommunity.com/sharedfiles/filedetails/?id=" + steamModId));
+                }
+            }
+        } catch (Exception ex) {
+            throw new InternalException().cause(ex);
+        }
     }
 
     private void publishSteamSyncProgress() {

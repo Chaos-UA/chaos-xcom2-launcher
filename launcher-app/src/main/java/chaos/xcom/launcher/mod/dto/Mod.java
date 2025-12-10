@@ -133,14 +133,4 @@ public class Mod {
         private String overriddenByMod;
     }
 
-    @Data
-    public static class ModDependency {
-        private String mod;
-        private DependencyType dependencyType;
-        private String targetMod;
-        private String declaredInMod;
-        private String overriddenByMod;
-        private boolean hasError;
-    }
-
 }

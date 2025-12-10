@@ -4,9 +4,10 @@ import chaos.xcom.launcher.gui.component.TableColumn;
 import chaos.xcom.launcher.gui.component.XTable;
 import chaos.xcom.launcher.gui.component.event.XTableModel;
 import chaos.xcom.launcher.mod.ModService;
+import chaos.xcom.launcher.mod.dto.DeclarationSource;
 import chaos.xcom.launcher.mod.dto.DependencyType;
 import chaos.xcom.launcher.mod.dto.Mod;
-import chaos.xcom.launcher.mod.dto.Mod.ModDependency;
+import chaos.xcom.launcher.mod.dto.ModDependency;
 import chaos.xcom.launcher.util.ColorConstant;
 import jakarta.enterprise.inject.spi.CDI;
 import lombok.Data;
@@ -93,6 +94,7 @@ public class ModDependenciesTable extends XTable {
         private String targetModId;
         private String declaredInModId;
         private String overriddenByModId;
+        private DeclarationSource source;
         private boolean hasError;
     }
 
@@ -109,7 +111,8 @@ public class ModDependenciesTable extends XTable {
                     new TableColumn<>("Dependency", DependencyType.class, ModDependenciesTableRow::getDependencyType),
                     new TableColumn<>("Target Mod ID", String.class, ModDependenciesTableRow::getTargetModId),
                     new TableColumn<>("Declared in Mod ID", String.class, ModDependenciesTableRow::getDeclaredInModId),
-                    new TableColumn<>("Overridden by Mod ID", String.class, ModDependenciesTableRow::getOverriddenByModId)
+                    new TableColumn<>("Overridden by Mod ID", String.class, ModDependenciesTableRow::getOverriddenByModId),
+                    new TableColumn<>("Source", DeclarationSource.class, ModDependenciesTableRow::getSource)
             };
         }
 
@@ -153,6 +156,7 @@ public class ModDependenciesTable extends XTable {
                     row.setDeclaredInModId(modDependency.getDeclaredInMod());
                     row.setDependencyType(modDependency.getDependencyType());
                     row.setOverriddenByModId(modDependency.getOverriddenByMod());
+                    row.setSource(modDependency.getSource());
                     row.setHasError(modDependency.isHasError());
                     rows.add(row);
                 }
