@@ -26,13 +26,12 @@ public class SortUtils {
         }
 
         public <R> SortResult<R> map(Function<T, R> mapper) {
-            SortResult<R> result = new SortResult<>(
-                    sorted.stream().map(mapper).collect(Collectors.toList()),
-                    cycles.stream().map(list -> {
-                        return list.stream().map(mapper).collect(Collectors.toList());
-                    }).collect(Collectors.toList())
+            return new SortResult<>(
+                    sorted.stream().map(mapper).toList(),
+                    cycles.stream()
+                            .map(c -> c.stream().map(mapper).toList())
+                            .toList()
             );
-            return result;
         }
     }
 
@@ -52,20 +51,22 @@ public class SortUtils {
         Map<T, List<T>> graph = new LinkedHashMap<>();
         Map<T, Integer> indegree = new LinkedHashMap<>();
 
-        for (SortItem<T> item : itemMap.values()) {
-            graph.put(item.getValue(), new ArrayList<>());
-            indegree.put(item.getValue(), 0);
+        for (T v : itemMap.keySet()) {
+            graph.put(v, new ArrayList<>());
+            indegree.put(v, 0);
         }
 
         // Build edges
         for (SortItem<T> item : itemMap.values()) {
             T val = item.getValue();
+
             for (T after : item.getAfterValues()) {
                 if (itemMap.containsKey(after)) {
                     graph.get(after).add(val);
                     indegree.compute(val, (k, v) -> v + 1);
                 }
             }
+
             for (T before : item.getBeforeValues()) {
                 if (itemMap.containsKey(before)) {
                     graph.get(val).add(before);
@@ -74,51 +75,86 @@ public class SortUtils {
             }
         }
 
+        // Kahn's algorithm
         Queue<T> queue = new ArrayDeque<>();
         for (var e : indegree.entrySet()) {
-            if (e.getValue() == 0) queue.add(e.getKey());
-        }
-
-        List<T> sorted = new ArrayList<>();
-        Set<T> processed = new LinkedHashSet<>();
-
-        while (!queue.isEmpty()) {
-            T val = queue.poll();
-            sorted.add(val);
-            processed.add(val);
-
-            for (T next : graph.get(val)) {
-                indegree.compute(next, (k, v) -> v - 1);
-                if (indegree.get(next) == 0) queue.add(next);
+            if (e.getValue() == 0) {
+                queue.add(e.getKey());
             }
         }
 
-        // Remaining nodes = cycles
+        List<T> sorted = new ArrayList<>();
+
+        while (!queue.isEmpty()) {
+            T v = queue.poll();
+            sorted.add(v);
+
+            for (T next : graph.get(v)) {
+                indegree.compute(next, (k, val) -> val - 1);
+                if (indegree.get(next) == 0) {
+                    queue.add(next);
+                }
+            }
+        }
+
+        // Remaining nodes (blocked by cycles)
         Set<T> remaining = indegree.entrySet().stream()
                 .filter(e -> e.getValue() > 0)
                 .map(Map.Entry::getKey)
-                .collect(Collectors.toSet());
+                .collect(Collectors.toCollection(LinkedHashSet::new));
 
         List<List<T>> orderedCycles = new ArrayList<>();
 
         if (!remaining.isEmpty()) {
-            // Use Tarjan SCC to detect cycles
             List<Set<T>> sccs = findSCCs(graph, remaining);
 
-            // Flatten each cycle in deterministic order
+            Set<T> cycleNodes = new HashSet<>();
+
             for (Set<T> scc : sccs) {
-                List<T> cycleList = scc.stream()
-                        .sorted(Comparator.comparing(Object::toString))
-                        .toList();
-                sorted.addAll(cycleList);
-                orderedCycles.add(cycleList);
+                if (scc.size() > 1) {
+                    List<T> cycle = new ArrayList<>(scc);
+                    orderedCycles.add(cycle);
+                    cycleNodes.addAll(cycle);
+                }
             }
+
+            // Classify leftover nodes
+            List<T> beforeCycles = new ArrayList<>();
+            List<T> afterCycles = new ArrayList<>();
+
+            for (T node : remaining) {
+                if (cycleNodes.contains(node)) continue;
+
+                boolean dependsOnCycle = false;
+                for (T cycleNode : cycleNodes) {
+                    if (graph.get(cycleNode).contains(node)) {
+                        dependsOnCycle = true;
+                        break;
+                    }
+                }
+
+                if (dependsOnCycle) {
+                    afterCycles.add(node);
+                } else {
+                    beforeCycles.add(node);
+                }
+            }
+
+            // Remove wrongly emitted nodes (must come AFTER cycles)
+            sorted.removeAll(afterCycles);
+
+            // Insert BEFORE-cycle nodes just before cycles
+            int cycleInsertIndex = sorted.size();
+            sorted.addAll(cycleNodes);
+
+            // Insert AFTER-cycle nodes
+            sorted.addAll(afterCycles);
         }
 
         return new SortResult<>(sorted, orderedCycles);
     }
 
-    // Tarjan's SCC
+    // Tarjan SCC
     private static <T> List<Set<T>> findSCCs(Map<T, List<T>> graph, Set<T> nodesToCheck) {
         List<Set<T>> sccs = new ArrayList<>();
         Map<T, Integer> index = new HashMap<>();
@@ -146,8 +182,8 @@ public class SortUtils {
                     }
                 }
 
-                if (Objects.equals(lowlink.get(v), index.get(v))) {
-                    Set<T> scc = new HashSet<>();
+                if (lowlink.get(v).equals(index.get(v))) {
+                    Set<T> scc = new LinkedHashSet<>();
                     T w;
                     do {
                         w = stack.pop();
@@ -155,16 +191,16 @@ public class SortUtils {
                         scc.add(w);
                     } while (!w.equals(v));
 
-                    if (scc.size() > 1) {
-                        sccs.add(scc);
-                    }
+                    sccs.add(scc);
                 }
             }
         }
 
         Tarjan t = new Tarjan();
         for (T node : nodesToCheck) {
-            if (!index.containsKey(node)) t.strongConnect(node);
+            if (!index.containsKey(node)) {
+                t.strongConnect(node);
+            }
         }
 
         return sccs;

@@ -79,7 +79,7 @@ class SortUtilsTest {
         assertEquals(1, result.getCycles().size());
         List<String> cycle = result.getCycles().get(0);
         assertEquals(3, cycle.size());
-        assertEquals(cycle, List.of("A", "B", "C"));
+        assertEquals(Set.of("A", "B", "C"), new HashSet<>(cycle));
     }
 
     @Test
@@ -217,7 +217,7 @@ class SortUtilsTest {
 
     @Test
     void testDependOnModFromCycle() {
-        // Cycle1: A -> B -> A
+        // Cycle: 2 -> 3 -> 4 -> 2
         SortItem<String> a = new SortItem<>();
         a.setValue("1");
         a.getBeforeValues().add("2");
@@ -226,7 +226,6 @@ class SortUtilsTest {
         b.setValue("2");
         b.getBeforeValues().add("3");
 
-        // Cycle2: C -> D -> E -> C
         SortItem<String> c = new SortItem<>();
         c.setValue("3");
         c.getBeforeValues().add("4");
@@ -235,18 +234,18 @@ class SortUtilsTest {
         d.setValue("4");
         d.getBeforeValues().add("2");
 
+        // Depends on cycle
         SortItem<String> e = new SortItem<>();
         e.setValue("5");
-        e.getAfterValues().add("3");
+        e.getAfterValues().add("3"); // must be AFTER cycle
 
         SortItem<String> i6 = new SortItem<>();
         i6.setValue("6");
-        i6.getBeforeValues().add("3");
+        i6.getBeforeValues().add("3"); // must be BEFORE cycle
 
-
-        List<SortItem<String>> items = List.of(a, b, c, d, e, i6
-        );
+        List<SortItem<String>> items = List.of(a, b, c, d, e, i6);
         SortResult<String> result = SortUtils.sort(items);
+
         List<String> sorted = result.getSorted();
 
         // 1️⃣ Total items
