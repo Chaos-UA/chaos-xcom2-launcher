@@ -1,12 +1,13 @@
 package chaos.xcom.launcher.gui.MainForm;
 
-import chaos.xcom.launcher.exception.InternalException;
+
 import chaos.xcom.launcher.gui.component.XTable;
 import chaos.xcom.launcher.gui.component.event.XMouseAdapter;
 import chaos.xcom.launcher.mod.ModService;
 import chaos.xcom.launcher.mod.dto.Mod;
 import chaos.xcom.launcher.mod.dto.ModStatus;
 import chaos.xcom.launcher.steam.SteamService;
+import chaos.xcom.launcher.swing.SwingService;
 import chaos.xcom.launcher.util.ColorConstant;
 import jakarta.enterprise.inject.spi.CDI;
 import org.apache.commons.lang3.StringUtils;
@@ -17,29 +18,16 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
-import java.net.URI;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 public class ModTable extends XTable {
 
     public ModTable() {
         super(new ModTableModel(List.of()));
         this.setModel(new ModTableModel(List.of()));
-
-        this.addHighlighter(new AbstractHighlighter() {
-            @Override
-            protected Component doHighlight(Component component, ComponentAdapter adapter) {
-                Mod row = getModel().getModByRawIndex(convertRowIndexToModel(adapter.row));
-
-                if (!row.isActive()) {
-                    //component.setBackground(ColorConstant.getTableBackgroundColor());
-                    component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
-                }
-
-                return component;
-            }
-        });
+        getModel().apply(this);
 
         addMouseListener(new XMouseAdapter() {
 
@@ -49,78 +37,102 @@ public class ModTable extends XTable {
             }
 
             private void showMenu(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    List<Mod> selectedMods = Arrays.stream(getSelectedRows()).mapToObj(v -> getModByIndex(v)).toList();
-                    if (selectedMods.isEmpty()) {
-                        return;
-                    }
-
-                    JPopupMenu menu = new JPopupMenu();
-
-                    JMenuItem activateModsItem = new JMenuItem("Activate");
-                    activateModsItem.addActionListener(ae -> {
-                        ModService modService = getModService();
-                        modService.setModsActive(selectedMods, true);
-                    });
-                    menu.add(activateModsItem);
-
-                    JMenuItem deactivateModsItem = new JMenuItem("Deactivate");
-                    deactivateModsItem.addActionListener(ae -> {
-                        ModService modService = getModService();
-                        modService.setModsActive(selectedMods, false);
-                    });
-                    menu.add(deactivateModsItem);
-
-                    List<Mod> existingMods = selectedMods.stream()
-                            .filter(mod -> mod.isExist())
-                            .toList();
-                    if (!existingMods.isEmpty()) {
-                        JMenuItem openDir = new JMenuItem("Open mod directory");
-                        openDir.addActionListener(ae -> {
-                            try {
-                                for (Mod mod : selectedMods) {
-                                    Desktop.getDesktop().open(mod.getDirectory());
-                                }
-                            } catch (IOException ex) {
-                                throw new RuntimeException(ex);
-                            }
-                        });
-                        menu.add(openDir);
-                    }
-                    List<Mod> modsWithSteamId = selectedMods.stream()
-                            .filter(mod -> StringUtils.isNotBlank(mod.getSteamMod().getSteamModId()))
-                            .toList();
-                    if (!modsWithSteamId.isEmpty()) {
-                        JMenuItem openSteamMod = new JMenuItem("Open mod in Steam");
-                        openSteamMod.addActionListener(ae -> {
-                            SteamService.openSteamModsInBrowser(modsWithSteamId.stream()
-                                    .map(v -> v.getSteamMod().getSteamModId()).toList());
-                        });
-                        menu.add(openSteamMod);
-
-                        JMenuItem syncSteamMod = new JMenuItem("Sync mod info from Steam");
-                        syncSteamMod.addActionListener(ae -> {
-                            getModService().syncSteamMods(modsWithSteamId);
-                        });
-                        menu.add(syncSteamMod);
-
-                        // remove deleted mod from list
-                        List<Mod> deletedMods = modsWithSteamId.stream()
-                                .filter(mod -> !mod.isExist())
-                                .toList();
-
-                        if (!deletedMods.isEmpty()) {
-                            JMenuItem removeDeletedMods = new JMenuItem("Remove deleted mod from list");
-                            removeDeletedMods.addActionListener(ae -> {
-                                ModService modService = getModService();
-                                modService.removeDeletedMods(deletedMods);
-                            });
-                            menu.add(removeDeletedMods);
-                        }
-
-                    }
-                    menu.show(e.getComponent(), e.getX(), e.getY());
+                List<Mod> selectedMods = Arrays.stream(getSelectedRows()).mapToObj(v -> getModByIndex(v)).toList();
+                if (selectedMods.isEmpty()) {
+                    return;
                 }
+
+                JPopupMenu menu = new JPopupMenu();
+
+                JMenuItem activateModsItem = new JMenuItem("Activate");
+                activateModsItem.addActionListener(ae -> {
+                    ModService modService = getModService();
+                    modService.setModsActive(selectedMods, true);
+                });
+                menu.add(activateModsItem);
+
+                JMenuItem deactivateModsItem = new JMenuItem("Deactivate");
+                deactivateModsItem.addActionListener(ae -> {
+                    ModService modService = getModService();
+                    modService.setModsActive(selectedMods, false);
+                });
+                menu.add(deactivateModsItem);
+                menu.addSeparator();
+
+                List<Mod> existingMods = selectedMods.stream()
+                        .filter(mod -> mod.isExist())
+                        .toList();
+                if (!existingMods.isEmpty()) {
+                    JMenuItem openDir = new JMenuItem("Open mod directory");
+                    openDir.addActionListener(ae -> {
+                        try {
+                            for (Mod mod : selectedMods) {
+                                Desktop.getDesktop().open(mod.getDirectory());
+                            }
+                        } catch (IOException ex) {
+                            throw new RuntimeException(ex);
+                        }
+                    });
+                    menu.add(openDir);
+                }
+                menu.addSeparator();
+
+                if (selectedMods.size() == 1) {
+                    Mod mod = selectedMods.get(0);
+                    JMenuItem changeSteamModIdItem = new JMenuItem("Manually set Steam workshop mod ID");
+                    changeSteamModIdItem.addActionListener(ae -> {
+                        String input = JOptionPane.showInputDialog(SwingService.getLastActiveWindowBounds(),
+                                "Please enter correct Steam workshop mod ID.\nEmpty means reset to default",
+                                mod.getSteamMod().getSteamModId());
+                        if (input == null) {
+                            return;
+                        }
+                        getModService().setSteamModId(mod, input);
+                    });
+                    menu.add(changeSteamModIdItem);
+
+                    menu.addSeparator();
+                    JMenuItem editUserModRules = new JMenuItem("Edit mod rules");
+                    editUserModRules.addActionListener(ae -> {
+                        getModService().openUserModRulesEditorDialog(mod);
+                    });
+                    menu.add(editUserModRules);
+                    menu.addSeparator();
+                }
+
+                List<Mod> modsWithSteamId = selectedMods.stream()
+                        .filter(mod -> StringUtils.isNotBlank(mod.getSteamMod().getSteamModId()))
+                        .toList();
+                if (!modsWithSteamId.isEmpty()) {
+                    JMenuItem openSteamMod = new JMenuItem("Open mod in Steam");
+                    openSteamMod.addActionListener(ae -> {
+                        SteamService.openSteamModsInBrowser(modsWithSteamId.stream()
+                                .map(v -> v.getSteamMod().getSteamModId()).toList());
+                    });
+                    menu.add(openSteamMod);
+
+                    JMenuItem syncSteamMod = new JMenuItem("Sync mod info from Steam");
+                    syncSteamMod.addActionListener(ae -> {
+                        getModService().syncSteamMods(modsWithSteamId);
+                    });
+                    menu.add(syncSteamMod);
+
+                    // remove deleted mod from list
+                    List<Mod> deletedMods = modsWithSteamId.stream()
+                            .filter(mod -> !mod.isExist())
+                            .toList();
+
+                    if (!deletedMods.isEmpty()) {
+                        JMenuItem removeDeletedMods = new JMenuItem("Remove deleted mod from list");
+                        removeDeletedMods.addActionListener(ae -> {
+                            ModService modService = getModService();
+                            modService.removeDeletedMods(deletedMods);
+                        });
+                        menu.add(removeDeletedMods);
+                    }
+
+                }
+                menu.show(e.getComponent(), e.getX(), e.getY());
             }
         });
 
@@ -133,31 +145,38 @@ public class ModTable extends XTable {
                     return component;
                 }
 
+                Color originalBackgroundColor = component.getBackground();
+
                 if (!mod.getStatuses().contains(ModStatus.OK)) {
                     if (mod.isActive()) {
-                        component.setBackground(ColorConstant.ERROR.getColor());
+                        component.setBackground(ColorConstant.ERROR);
                     } else { // not ok and not active
                         component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
                         if (mod.getStatuses().contains(ModStatus.DUPLICATE)) {
-                            component.setBackground(ColorConstant.ERROR.getColor());
+                            component.setBackground(ColorConstant.ERROR);
+                        } else if (mod.isNewMod()) {
+                            //component.setBackground(ColorConstant.NEW_MOD);
                         }
                     }
+                }
+
+                if (adapter.column == 6 && getModService().hasDeclaredUserDependency(mod)) { // Declared dependencies
+                    JLabel lbl = (JLabel) component;
+                    lbl.setText("<html><strong>" + lbl.getText() + "</strong></html>");
+                } else if (adapter.column == 8) { // STEAM MOD ID COLUMN
+                    if (!Objects.equals(mod.getSteamModIdByDirName(), mod.getSteamDbModId())) {
+                        JLabel lbl = (JLabel) component;
+                        lbl.setText("<html><strong>" + lbl.getText() + "</strong></html>");
+                    }
+                }
+
+                if (adapter.isSelected() && !originalBackgroundColor.equals(component.getBackground())) {
+                    component.setBackground(component.getBackground().darker());
                 }
 
                 return component;
             }
         });
-    }
-
-    /**
-     * Fix LookAndFill change without restarting the app
-     */
-    @Override
-    public void updateUI() {
-        super.updateUI();
-        if (getModel() != null) {
-            getModel().apply(this);
-        }
     }
 
     public ModTableModel getModel() {

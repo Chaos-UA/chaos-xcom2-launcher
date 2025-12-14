@@ -25,6 +25,8 @@ public class DbProperties extends AbstractProperties {
     public final BooleanProperty exitOnGameLaunch = booleanProp("exitOnGameLaunch", true, "Exit on XCOM game launch to free RAM memory resources");
     public final BooleanProperty syncMissingSteamModsOnReload = booleanProp("syncMissingSteamModsOnReload", true,
             "Sync missing Steam mods on mods reload");
+    public final BooleanProperty gameLogEnabled = booleanProp("gameLogEnabled", false,
+            "Write log to xcom-game.log file in launcher directory");
     public final JsonProperty<SwingComponentStates> swingComponentStates = jsonProp("swingComponentStates",
             new TypeReference<>() {}, new SwingComponentStates(),
             "Swing components states. Windows positions, sizes, etc.");

@@ -4,9 +4,10 @@ import chaos.xcom.launcher.gui.component.TableColumn;
 import chaos.xcom.launcher.gui.component.XTable;
 import lombok.Getter;
 
+import javax.swing.*;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
-import javax.swing.table.DefaultTableModel;
+import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
@@ -62,8 +63,13 @@ public class XTableModel<T> extends AbstractTableModel {
                         try {
                             setText(renderAs.apply(value));
                         } catch (Exception e) {
-                            super.setValue(value);
+                            setValue(value);
                         }
+                    }
+
+                    @Override
+                    public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+                        return XTable.setComponentTooltipByText(super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column));
                     }
                 });
             }

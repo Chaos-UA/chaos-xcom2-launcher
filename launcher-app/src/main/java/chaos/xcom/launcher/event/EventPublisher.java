@@ -13,6 +13,10 @@ public class EventPublisher {
 
     private final Event<Object> eventPublisher;
 
+    public void publishAsync(SkinChangeEvent event) {
+        eventPublisher.fireAsync(event);
+    }
+
     public void publishAsync(PropertyChangedEvent propertyChangedEvent) {
         eventPublisher.fireAsync(propertyChangedEvent);
     }

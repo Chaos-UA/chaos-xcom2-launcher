@@ -76,8 +76,13 @@ public class GameService {
             exeCommands.addAll(dbProps.gameLaunchArgs.get());
 
             ProcessBuilder pb = new ProcessBuilder(exeCommands);
-            pb.redirectOutput(ProcessBuilder.Redirect.DISCARD);
-            pb.redirectError(ProcessBuilder.Redirect.DISCARD);
+            if (dbProps.gameLogEnabled.isTrue()) {
+                pb.redirectOutput(new File("xcom-game.log").getAbsoluteFile());
+                pb.redirectError(new File("xcom-game.log").getAbsoluteFile());
+            } else {
+                pb.redirectOutput(ProcessBuilder.Redirect.DISCARD);
+                pb.redirectError(ProcessBuilder.Redirect.DISCARD);
+            }
             pb.directory(exeFile.getParentFile());
             process = pb.start();
 
@@ -127,7 +132,7 @@ public class GameService {
         log.info("Preparing {} mods directory: {}", mods.size(), targetTempModsDir);
         deleteAllLinksFromDir(targetTempModsDir);
         for (Mod mod : mods) {
-            String paddedOrderNumber = String.format("%06d_", mod.getLoadOrder());
+            String paddedOrderNumber = String.format("%05d_", mod.getLoadOrder());
             File modDir = mod.getDirectory();
             File targetDir = new File(targetTempModsDir + "/" + paddedOrderNumber + mod.getId());
             createLink(modDir, targetDir);
@@ -139,10 +144,12 @@ public class GameService {
     }
 
     void deleteAllLinksFromDir(File targetDir) {
+        targetDir.mkdir();
         if (!targetDir.isDirectory()) {
             JOptionPane.showMessageDialog(SwingService.getLastActiveWindowBounds(),
-                    "Invalid temp mods directory:\n" + targetDir, "Error",
+                    "Invalid temp mods directory:\n" + targetDir.getAbsolutePath(), "Error",
                     JOptionPane.ERROR_MESSAGE);
+            return;
         }
         for (File f : ObjectUtils.defaultIfNull(targetDir.listFiles(), new File[0])) {
             deleteLink(f);

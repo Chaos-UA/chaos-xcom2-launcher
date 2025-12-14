@@ -64,7 +64,7 @@ public class SettingsDialog extends JDialog {
     private JLabel lblXCOmModOptionsIniError;
     private JLabel lblXComExe;
     private JCheckBox cbSyncMissingSteamModsOnModsReload;
-    private JCheckBox cbCalculateModSizeOnReload;
+    private JCheckBox cbGameLogEnabled;
 
     public void openSettings() {
         this.setVisible(true);
@@ -91,7 +91,7 @@ public class SettingsDialog extends JDialog {
         setModal(true);
 
         getRootPane().setDefaultButton(buttonClose);
-        setLocationRelativeTo(null);
+        setLocationRelativeTo(SwingService.getLastActiveWindowBounds());
 
         cbArgs.add(cbArgReview);
         cbArgs.add(cbArgNoRedScreens);
@@ -258,7 +258,17 @@ public class SettingsDialog extends JDialog {
             reloadCbSyncMissingSteamModsOnReload();
         });
 
+        reloadGameLogEnabled();
+        cbGameLogEnabled.addActionListener(e -> {
+            dbProps.gameLogEnabled.set(cbGameLogEnabled.isSelected());
+            reloadGameLogEnabled();
+        });
+
         swingService.applyFullWindowState("SettingsDialog", this);
+    }
+
+    private void reloadGameLogEnabled() {
+        cbGameLogEnabled.setSelected(dbProps.gameLogEnabled.isTrue());
     }
 
     private void reloadGameExe() {
@@ -490,14 +500,14 @@ public class SettingsDialog extends JDialog {
         panel7.add(cbExitOnGameLaunch, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         cbGuiSkins = new JComboBox();
         panel6.add(cbGuiSkins, new GridConstraints(0, 1, 1, 2, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
-        cbCalculateModSizeOnReload = new JCheckBox();
-        cbCalculateModSizeOnReload.setEnabled(false);
-        cbCalculateModSizeOnReload.setSelected(true);
-        cbCalculateModSizeOnReload.setText("Calculate mod directory size on reload");
-        panel6.add(cbCalculateModSizeOnReload, new GridConstraints(3, 0, 1, 3, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         cbSyncMissingSteamModsOnModsReload = new JCheckBox();
         cbSyncMissingSteamModsOnModsReload.setText("Sync missing Steam info for mods on mods reload");
         panel6.add(cbSyncMissingSteamModsOnModsReload, new GridConstraints(2, 0, 1, 3, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        cbGameLogEnabled = new JCheckBox();
+        cbGameLogEnabled.setEnabled(true);
+        cbGameLogEnabled.setText("xcom-game.log");
+        cbGameLogEnabled.setToolTipText("If enabled and game started via launcher then output form process will be written to the file in launcher directory");
+        panel6.add(cbGameLogEnabled, new GridConstraints(3, 0, 1, 2, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         final Spacer spacer3 = new Spacer();
         contentPane.add(spacer3, new GridConstraints(4, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_VERTICAL, 1, GridConstraints.SIZEPOLICY_WANT_GROW, null, null, null, 0, false));
     }

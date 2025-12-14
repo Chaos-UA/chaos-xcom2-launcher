@@ -4,6 +4,7 @@ import chaos.xcom.launcher.db.property.DbProperties;
 import io.quarkus.runtime.Startup;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import jakarta.enterprise.inject.spi.CDI;
 import jakarta.inject.Singleton;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,6 +27,10 @@ public class SwingService {
 
     public static Window getLastActiveWindowBounds() {
         return lastActiveWindow;
+    }
+
+    public static SwingService get() {
+        return CDI.current().select(SwingService.class).get();
     }
 
     @PostConstruct

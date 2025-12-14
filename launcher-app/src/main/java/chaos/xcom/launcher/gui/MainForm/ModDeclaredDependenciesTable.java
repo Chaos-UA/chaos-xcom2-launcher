@@ -5,11 +5,9 @@ import chaos.xcom.launcher.gui.component.XTable;
 import chaos.xcom.launcher.gui.component.event.XMouseAdapter;
 import chaos.xcom.launcher.gui.component.event.XTableModel;
 import chaos.xcom.launcher.mod.ModService;
-import chaos.xcom.launcher.mod.dto.DeclarationSource;
 import chaos.xcom.launcher.mod.dto.DependencyType;
 import chaos.xcom.launcher.mod.dto.Mod;
 import chaos.xcom.launcher.mod.dto.ModDeclaredDependency;
-import chaos.xcom.launcher.steam.SteamMod;
 import chaos.xcom.launcher.steam.SteamMod.SteamRequiredMod;
 import chaos.xcom.launcher.steam.SteamService;
 import chaos.xcom.launcher.util.ColorConstant;
@@ -18,17 +16,15 @@ import org.jdesktop.swingx.decorator.ComponentAdapter;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.event.MouseMotionAdapter;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class ModDeclaredDependenciesTable extends XTable {
     private static final int TARGET_MOD_ID_COLUMN_INDEX = 2;
     private ModDependenciesTableModel model;
+    private Mod mod;
 
     public ModDeclaredDependenciesTable() {
         this.model = new ModDependenciesTableModel();
@@ -36,35 +32,37 @@ public class ModDeclaredDependenciesTable extends XTable {
         model.apply(this);
         setMod(null);
 
-        addMouseMotionListener(new MouseMotionAdapter() {
+        addMouseListener(new XMouseAdapter() {
             @Override
-            public void mouseMoved(MouseEvent e) {
-                int selectedRow = rowAtPoint(e.getPoint());
-                if (selectedRow < 0) {
-                    return;
-                }
-
-                ModDeclaredDependency row = model.getRows().get(selectedRow);
-                if (row.getTargetMod() == null && row.getSteamRequiredMod().getSteamModId() != null) {
-                    setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-                } else {
-                    setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
-                }
+            public void popUpTrigger(MouseEvent e) {
+                showMenu(e);
             }
-        });
 
-        addMouseListener(new MouseAdapter() {
-
-            @Override
-            public void mousePressed(MouseEvent e) {
-                int selectedRowIndex =  rowAtPoint(e.getPoint());
-                if (selectedRowIndex < 0) {
+            private void showMenu(MouseEvent e) {
+                if (mod == null) {
                     return;
                 }
-                ModDeclaredDependency row = model.getRows().get(selectedRowIndex);
-                if (row.getTargetMod() == null && row.getSteamRequiredMod().getSteamModId() != null) {
-                    SteamService.openSteamModInBrowser(row.getSteamRequiredMod().getSteamModId());
+                JPopupMenu menu = new JPopupMenu();
+                JMenuItem editUserModRules = new JMenuItem("Edit mod rules");
+                editUserModRules.addActionListener(ae -> {
+                    ModService.get().openUserModRulesEditorDialog(mod);
+                });
+                menu.add(editUserModRules);
+
+                int selectedRow = rowAtPoint(e.getPoint());
+                if (selectedRow >= 0) {
+                    ModDeclaredDependency row = model.getRows().get(selectedRow);
+                    if (row.getSteamRequiredMod().getSteamModId() != null) {
+                        JMenuItem browseSteamMod = new JMenuItem("Browse Steam mod - " + row.getSteamRequiredMod().getSteamModName());
+                        browseSteamMod.addActionListener(ae -> {
+                            SteamService.openSteamModInBrowser(row.getSteamRequiredMod().getSteamModId());
+                        });
+                        menu.addSeparator();
+                        menu.add(browseSteamMod);
+                    }
                 }
+
+                menu.show(e.getComponent(), e.getX(), e.getY());
             }
         });
 
@@ -76,57 +74,21 @@ public class ModDeclaredDependenciesTable extends XTable {
                     return component;
                 }
                 if (row.isHasError()) {
-                    component.setBackground(ColorConstant.ERROR.getColor());
+                    component.setBackground(ColorConstant.ERROR);
                 }
                 if (row.getTargetMod() == null && adapter.column == TARGET_MOD_ID_COLUMN_INDEX) {
                     component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
                 }
-//                int colIndex = convertColumnIndexToModel(adapter.column);
-//                if (colIndex == MOD_ID_COLUMN_INDEX) {
-//                    JCheckBox checkBox = (JCheckBox) component;
-//                    checkBox.setHorizontalAlignment(SwingConstants.LEFT);
-//                    checkBox.setSelected(getModService().isModActive(row.getModId()));
-//                    checkBox.setText(row.getModId());
-//                    if (!getModService().isModExist(row.getModId())) {
-//                        checkBox.setEnabled(false);
-//                        //checkBox.setForeground(ColorConstant.getLabelDisabledForegroundColor());
-//                        //JLabel lbl = new JLabel("  " + row.getTargetModId());
-//                        //component = lbl;
-//                        component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
-//                    }
-//                } else if (colIndex == TARGET_MOD_ID_COLUMN_INDEX) {
-//                    JCheckBox checkBox = (JCheckBox) component;
-//                    checkBox.setHorizontalAlignment(SwingConstants.LEFT);
-//                    checkBox.setSelected(getModService().isModActive(row.getTargetModId()));
-//                    checkBox.setText(row.getTargetModId());
-//                    if (!getModService().isModExist(row.getTargetModId())) {
-//                        checkBox.setEnabled(false);
-//                        //JLabel lbl = new JLabel("  " + row.getTargetModId());
-//                        //component = lbl;
-//                        component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
-//                    }
-//                }
-//
-//                if (row.getOverriddenByModId() != null) {
-//                    component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
-//                }
-//                if (row.isHasError()) {
-//                    component.setBackground(ColorConstant.ERROR.getColor());
-//                }
-
                 return component;
             }
         });
     }
 
     public void setMod(Mod mod) {
+        this.mod = mod;
         model.setMod(mod);
         model.apply(this);
         packAll();
-    }
-
-    ModService getModService() {
-        return ModService.get();
     }
 
     public class ModDependenciesTableModel extends XTableModel<ModDeclaredDependency> {
@@ -150,7 +112,12 @@ public class ModDeclaredDependenciesTable extends XTable {
                             return targetMod;
                         }
                     }),
-                    new TableColumn<>("Source", DeclarationSource.class, ModDeclaredDependency::getSource)
+                    new TableColumn<>("Source", String.class, new Function<ModDeclaredDependency, String>() {
+                        @Override
+                        public String apply(ModDeclaredDependency declarationSource) {
+                            return declarationSource.getSources().stream().map(v -> v.name()).collect(Collectors.joining(", "));
+                        }
+                    })
             };
         }
 

@@ -1,31 +1,43 @@
 package chaos.xcom.launcher.mod;
 
 import chaos.db.gen.tables.records.ModRecord;
+import chaos.db.gen.tables.records.UserModRuleRecord;
 import chaos.xcom.launcher.db.property.DbProperties;
+import chaos.xcom.launcher.event.SkinChangeEvent;
+import chaos.xcom.launcher.gui.EditModDependencyDialog.EditModDependencyDialog;
+import chaos.xcom.launcher.gui.LookAndFeelService;
+import chaos.xcom.launcher.gui.MainForm.LauncherService;
 import chaos.xcom.launcher.gui.MainForm.MainForm;
+import chaos.xcom.launcher.gui.MainForm.MainFormMenuBar;
 import chaos.xcom.launcher.highlander.CommunityHighlanderUtils;
 import chaos.xcom.launcher.highlander.dto.HighlanderModConfig;
 import chaos.xcom.launcher.highlander.dto.HighlanderModConfig.RunOrderDeclaration;
 import chaos.xcom.launcher.highlander.dto.HighlanderRunPriorityGroup;
 import chaos.xcom.launcher.mod.dto.*;
 import chaos.xcom.launcher.mod.dto.Mod.ModLoadOrderDeclaration;
-import chaos.xcom.launcher.mod.dto.Mod.ModLoadOrderGroupDeclaration;
+import chaos.xcom.launcher.mod.rule.UserModRuleRepository;
+import chaos.xcom.launcher.mod.rule.UserRuleDeclaration;
 import chaos.xcom.launcher.steam.SteamMod;
 import chaos.xcom.launcher.steam.SteamMod.SteamRequiredMod;
 import chaos.xcom.launcher.steam.SteamService;
 import chaos.xcom.launcher.steam.SteamSyncProgress;
+import chaos.xcom.launcher.swing.SwingService;
 import chaos.xcom.launcher.util.FileUtils;
 import chaos.xcom.launcher.util.SortUtils;
 import chaos.xcom.launcher.util.SortUtils.SortItem;
 import chaos.xcom.launcher.util.SortUtils.SortResult;
 import chaos.xcom.launcher.util.XComModFinderUtils;
 import chaos.xcom.launcher.util.XComUtils;
+import io.quarkus.runtime.Startup;
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.event.ObservesAsync;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.inject.Singleton;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 
 import javax.swing.*;
 import java.io.ByteArrayInputStream;
@@ -36,15 +48,24 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+@Startup
 @Singleton
 @RequiredArgsConstructor
 @Slf4j
 public class ModService {
 
     private final DbProperties dbProps;
-    private final MainForm mainForm;
+    private final LauncherService launcherService;
+    private final MainFormMenuBar mainFormMenuBar;
+    private final SwingService swingService;
+    /**
+     * Required to be injected before this class init to already init skin.
+     */
+    private final LookAndFeelService lookAndFeelService;
+    private MainForm mainForm;
     private final ModRepository modRepository;
     private final SteamService steamService;
+    private final UserModRuleRepository userModRuleRepository;
 
     /**
      * String is mod ID, and values are mods under this ID, multiple values in case of duplicates.
@@ -53,14 +74,62 @@ public class ModService {
 
     private LinkedHashMap<String, Mod> allMods = new LinkedHashMap<>();
     private HashMap<String, Mod> steamModIdToModMap = new HashMap<>();
+    private HashMap<String, List<ReplacedByMod>> replacedByModIdToModMap = new HashMap<>();
+    private Map<String, List<UserRuleDeclaration>> userRulesByMod = new HashMap<>();
+    private Map<String, List<UserRuleDeclaration>> userRulesByTargetMod = new HashMap<>();
 
     public static ModService get() {
         return CDI.current().select(ModService.class).get();
     }
 
+    @PostConstruct
+    void init() {
+        recreateForm();
+        reloadModsFromDirs();
+    }
+
+    public void onSkinChange(@ObservesAsync SkinChangeEvent event) {
+        SwingUtilities.invokeLater(() -> recreateForm());
+    }
+
+    private synchronized void recreateForm() {
+        List<Mod> mods = new ArrayList<>();
+        if (mainForm != null) {
+            mods = mainForm.getMods();
+            mainForm.dispose();
+            mainForm = null;
+        }
+        this.mainForm = new MainForm(launcherService, mainFormMenuBar, swingService);
+        this.mainForm.init();
+        try {
+            mainForm.setMods(mods);
+        } catch (Exception e) {
+            log.error("Failed to recreate form", e);
+        }
+    }
+
+    public void setSteamModId(Mod mod, String newSteamModId) {
+        newSteamModId = StringUtils.trimToNull(newSteamModId);
+        if (newSteamModId == null) {
+            newSteamModId = mod.getSteamModIdByDirName();
+        }
+        mod.setSteamDbModId(newSteamModId);
+        mod.setSteamMod(new SteamMod());
+        mod.getSteamMod().setSteamModId(newSteamModId);
+        log.info("Mod {} changed manually steam ID to {}", mod.getId(), mod.getSteamDbModId());
+        saveModToDb(mod);
+        reloadModsFromDirs();
+    }
+
+    public void selectMod(Mod mod) {
+        mainForm.selectModIfExist(mod);
+        log.info("Selected mod {}", mod.getId());
+    }
+
     public void setModsActive(Collection<Mod> mods, boolean active) {
         for (Mod mod : mods) {
             mod.setActive(active);
+            mod.setNewMod(false);
         }
         saveModsToDb(mods);
         log.info("{} mods is now {}", mods.size(), active ? "active" : "inactive");
@@ -77,10 +146,16 @@ public class ModService {
                 //return;
             }
             mod.setActive(active);
+            mod.setNewMod(false);
             log.info("Mod with ID {} is now {}", modId, active ? "active" : "inactive");
             saveModToDb(mod);
         }
         recalculateModDependencies();
+    }
+
+    public void openUserModRulesEditorDialog(Mod mod) {
+        log.info("Mod {} editing mod rules", mod.getId());
+        new EditModDependencyDialog(mod, allMods, userRulesByMod, userRulesByTargetMod);
     }
 
     @PreDestroy
@@ -118,6 +193,41 @@ public class ModService {
         mainForm.onMainTableDataChange();
     }
 
+    /**
+     * @param userRules to save. All not included records will be removed from DB.
+     */
+    public void applyUserModRules(Collection<UserRuleDeclaration> userRules) {
+        // remove duplicates and invalid values
+        List<UserRuleDeclaration> validRules = new ArrayList<>(userRules.size());
+        Set<String> unique = new HashSet<>();
+        for (UserRuleDeclaration userRule : userRules) {
+            if (userRule.getType() == null || userRule.getTargetModId() == null || userRule.getModId() == null
+                    || Objects.equals(userRule.getModId(), userRule.getTargetModId())) {
+                continue;
+            }
+            if (unique.add(userRule.getModId() + userRule.getTargetModId() + userRule.getTargetModId())) {
+                // add unique only
+                validRules.add(userRule);
+            }
+        }
+
+        List<Long> userRuleIds = validRules.stream().map(UserRuleDeclaration::getId).filter(Objects::nonNull).toList();
+        List<Long> recordIdsToDelete = userModRuleRepository.findNotProvidedUserIds(userRuleIds);
+        userModRuleRepository.save(validRules.stream().map(this::toUserModRuleRecord).toList());
+        userModRuleRepository.deleteByIds(recordIdsToDelete);
+        log.info("Modified user mod rules, saved {}, deleted {}", validRules.size(), recordIdsToDelete.size());
+        reloadModsFromDirs();
+    }
+
+    private UserModRuleRecord toUserModRuleRecord(UserRuleDeclaration userRule) {
+        UserModRuleRecord record = new UserModRuleRecord();
+        record.setId(userRule.getId());
+        record.setMod1Id(userRule.getModId());
+        record.setType(userRule.getType().name());
+        record.setMod2Id(userRule.getTargetModId());
+        return record;
+    }
+
     public void saveAllModsToDb() {
         List<ModRecord> modRecords = allMods.values().stream().map(this::toDbModRecord).toList();
         modRepository.save(modRecords);
@@ -128,13 +238,12 @@ public class ModService {
         ModRecord modDbRecord = new ModRecord();
         modDbRecord.setId(mod.getId());
         modDbRecord.setTitle(mod.getTitle());
-        modDbRecord.setActive(mod.isActive());
+        modDbRecord.setIsActive(mod.isActive());
+        modDbRecord.setIsNew(mod.isNewMod());
         modDbRecord.setDirectory(mod.getDirectory().getAbsolutePath());
         modDbRecord.setSizeBytes(mod.getSize());
         SteamMod steamMod = mod.getSteamMod();
-        if (steamMod != null) {
-            modDbRecord.setSteamModId(steamMod.getSteamModId());
-        }
+        modDbRecord.setSteamModId(steamMod.getSteamModId());
         return modDbRecord;
     }
 
@@ -214,16 +323,47 @@ public class ModService {
     /**
      * @return map with key as modId, and values as mods which has ignoreRequired mod for key modId.
      */
-    private LinkedHashMap<String, LinkedHashSet<String>> extractIgnoreRequiredMods(Collection<Mod> mods) {
-        LinkedHashMap<String, LinkedHashSet<String>> result = new LinkedHashMap<>();
+    private LinkedHashMap<String, List<ReplacedByMod>> extractIgnoreRequiredMods(Collection<Mod> mods) {
+        LinkedHashMap<String, List<ReplacedByMod>> result = new LinkedHashMap<>();
         for (Mod mod : mods) {
             for (HighlanderModConfig config : mod.getHighlanderModsConfig().getModConfigs().values()) {
                 for (String ignoreRequiredMod : config.getIgnoreRequiredMods()) {
-                    result.computeIfAbsent(ignoreRequiredMod, k -> new LinkedHashSet<>()).add(config.getMod());
+                    ReplacedByMod replacedByMod = new ReplacedByMod(ignoreRequiredMod, config.getMod(), mod.getId());
+                    result.computeIfAbsent(ignoreRequiredMod, k -> new ArrayList<>()).add(replacedByMod);
                 }
             }
         }
         return result;
+    }
+
+    public Collection<Mod> findModsByIds(List<String> mods) {
+        return mods.stream().map(v -> allMods.get(v)).filter(Objects::nonNull).collect(Collectors.toSet());
+    }
+
+    public List<UserRuleDeclaration> getUserModRulesByMod(String modId) {
+        return userRulesByMod.getOrDefault(modId, List.of());
+    }
+
+    public boolean hasDeclaredUserDependency(Mod mod) {
+        return userRulesByMod.containsKey(mod.getId());
+    }
+
+    public int getDeclaredUserDependenciesSize(Mod mod) {
+        return userRulesByMod.getOrDefault(mod.getId(), List.of()).size();
+    }
+
+
+    @Data
+    private static class ReplacedByMod {
+        /**
+         * IgnoreRequiredMod
+         */
+        private final String mod;
+        /**
+         * Mod alternative
+         */
+        private final String replacedByMod;
+        private final String declaredInMod;
     }
 
     synchronized void recalculateModDependencies() {
@@ -231,27 +371,15 @@ public class ModService {
         for (Mod mod : allMods.values()) {
             mod.clearStateForLoadOrderCalculation();
         }
+        resetIgnoreRequiredReplacements();
         fillSteamMods(allMods);
-        // TODO fillUserRulesToMods();
+        resetAndFillUserDeclarationRules();
         resetModsDependencies(allMods);
-        List<Mod> activeMods = new ArrayList<>();
-        List<Mod> inactiveMods = new ArrayList<>();
-        for (Mod mod : allMods.values()) {
-            if (mod.isActive()) {
-                activeMods.add(mod);
-            } else {
-                inactiveMods.add(mod);
-            }
-        }
 
-        LinkedHashMap<String, Mod> loadOrderSortedMods = toLinkedHashMap(sortModsForLoadOrder(activeMods));
-        inactiveMods.sort(Comparator.comparing(mod -> mod.getId().toLowerCase()));
-        for (Mod inactiveMod : inactiveMods) {
-            loadOrderSortedMods.put(inactiveMod.getId(), inactiveMod);
-        }
+        LinkedHashMap<String, Mod> loadOrderSortedMods = sortModsForLoadOrder(allMods.values());
 
         this.allMods = loadOrderSortedMods;
-        recalculateModsStatuses();
+        calculateModsStatuses();
 
         // expand duplicate mods to show in table
         ArrayList<Mod> tableMods = new ArrayList<>(loadOrderSortedMods.size());
@@ -267,17 +395,39 @@ public class ModService {
             }
         }
 
-        mainForm.setMods(tableMods);
         if (dbProps.syncMissingSteamModsOnReload.get()) {
             this.syncMissingSteamMods();
         }
-        Thread.ofVirtual().start(System::gc); // suggest GC to free memory after recalculation
+        SwingUtilities.invokeLater(() -> mainForm.setMods(tableMods));
+    }
+
+    private void resetAndFillUserDeclarationRules() {
+        this.userRulesByMod = new HashMap<>();
+        this.userRulesByTargetMod = new HashMap<>();
+        List<UserModRuleRecord> records = userModRuleRepository.findAll();
+        for (UserModRuleRecord record : records) {
+            try {
+                UserRuleDeclaration userModRule = new UserRuleDeclaration();
+                userModRule.setId(record.getId());
+                userModRule.setModId(record.getMod1Id());
+                userModRule.setType(UserRuleDeclaration.RuleType.valueOf(record.getType()));
+                userModRule.setTargetModId(record.getMod2Id());
+                userRulesByMod.computeIfAbsent(userModRule.getModId(), k -> new ArrayList<>()).add(userModRule);
+                userRulesByTargetMod.computeIfAbsent(userModRule.getTargetModId(), k -> new ArrayList<>()).add(userModRule);
+            } catch (Exception e) {
+                log.error("Failed to read record: {}", record);
+            }
+        }
+        log.info("Loaded {} user mod rules", records.size());
+    }
+
+    private void resetIgnoreRequiredReplacements() {
+        replacedByModIdToModMap = extractIgnoreRequiredMods(allMods.values());
     }
 
     private void resetModsDependencies(LinkedHashMap<String, Mod> allMods) {
         for (Mod mod : allMods.values()) {
-            ArrayList<ModDeclaredDependency> dependencies = new ArrayList<>();
-            mod.setDeclaredDependencies(dependencies);
+            mod.setDeclaredDependencies(new ArrayList<>());
 
             SteamMod steamMod = mod.getSteamMod();
             for (SteamRequiredMod requiredSteamMod : steamMod.getRequiredSteamMods()) {
@@ -291,8 +441,8 @@ public class ModService {
                 }
                 declaredDependency.setDependencyType(DependencyType.REQUIRED);
                 declaredDependency.setSteamRequiredMod(requiredSteamMod);
-                declaredDependency.setSource(DeclarationSource.STEAM);
-                dependencies.add(declaredDependency);
+                declaredDependency.getSources().add(DeclarationSource.STEAM);
+                mod.addDeclaredDependency(declaredDependency);
             }
 
             HighlanderModConfig highlanderModConfig = mod.getHighlanderModsConfig().getModConfigs().get(mod.getId());
@@ -302,39 +452,56 @@ public class ModService {
                     declaredDependency.setMod(mod.getId());
                     declaredDependency.setTargetMod(requiredModId);
                     declaredDependency.setDependencyType(DependencyType.REQUIRED);
-                    declaredDependency.setSource(DeclarationSource.HIGHLANDER);
-                    dependencies.add(declaredDependency);
+                    declaredDependency.getSources().add(DeclarationSource.HIGHLANDER);
+                    mod.addDeclaredDependency(declaredDependency);
                 }
                 for (String incompatibleModId : highlanderModConfig.getIncompatibleMods()) {
                     ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
                     declaredDependency.setMod(mod.getId());
                     declaredDependency.setTargetMod(incompatibleModId);
                     declaredDependency.setDependencyType(DependencyType.INCOMPATIBLE);
-                    declaredDependency.setSource(DeclarationSource.HIGHLANDER);
-                    dependencies.add(declaredDependency);
+                    declaredDependency.getSources().add(DeclarationSource.HIGHLANDER);
+                    mod.addDeclaredDependency(declaredDependency);
                 }
                 for (String ignoredRequiredModId : highlanderModConfig.getIgnoreRequiredMods()) {
                     ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
                     declaredDependency.setMod(mod.getId());
                     declaredDependency.setTargetMod(ignoredRequiredModId);
                     declaredDependency.setDependencyType(DependencyType.REPLACED);
-                    declaredDependency.setSource(DeclarationSource.HIGHLANDER);
-                    dependencies.add(declaredDependency);
+                    declaredDependency.getSources().add(DeclarationSource.HIGHLANDER);
+                    mod.addDeclaredDependency(declaredDependency);
                 }
+            }
 
-                // todo user declarations
+            for (UserRuleDeclaration ruleDeclaration : userRulesByMod.getOrDefault(mod.getId(), List.of())) {
+                if (ruleDeclaration.getType() == UserRuleDeclaration.RuleType.REQUIRED) {
+                    ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
+                    declaredDependency.setMod(ruleDeclaration.getModId());
+                    declaredDependency.setTargetMod(ruleDeclaration.getTargetModId());
+                    declaredDependency.setDependencyType(DependencyType.REQUIRED);
+                    declaredDependency.getSources().add(DeclarationSource.USER);
+                    mod.addDeclaredDependency(declaredDependency);
+                }
             }
         }
     }
 
-    void recalculateModsStatuses() {
+    void calculateModsStatuses() {
+        Map<String, Integer> conflictSteamIds = new HashMap<>();
         for (Mod mod : allMods.values()) {
-            recalculateModStatus(mod);
+            if (mod.getSteamMod().getSteamModId() != null) {
+                int counter = conflictSteamIds.getOrDefault(mod.getSteamMod().getSteamModId(), 0);
+                conflictSteamIds.put(mod.getSteamMod().getSteamModId(), counter + 1);
+            }
+        }
+
+        for (Mod mod : allMods.values()) {
+            recalculateModStatus(mod, conflictSteamIds);
         }
     }
 
-    void recalculateModStatus(Mod mod) {
-        TreeSet<ModStatus> modStatuses = new TreeSet<>();
+    void recalculateModStatus(Mod mod, Map<String, Integer> conflictSteamIds) {
+        Set<ModStatus> modStatuses = mod.getStatuses();
 
         if (!mod.isActive()) {
             modStatuses.add(ModStatus.INACTIVE);
@@ -346,20 +513,22 @@ public class ModService {
             modStatuses.add(ModStatus.CYCLIC_DEPENDENCY);
         }
 
+        if (mod.isNewMod()) {
+            modStatuses.add(ModStatus.NEW);
+        }
+
         for (ModDependency modDependency : mod.getDependencies()) {
-            if (!Objects.equals(modDependency.getMod(), mod.getId()) || modDependency.getOverriddenByMod() != null) {
+            if (!Objects.equals(modDependency.getMod(), mod.getId()) || !modDependency.isActive()) {
                 continue;
             }
 
             Mod targetMod = allMods.get(modDependency.getTargetMod());
-            if (modDependency.getDependencyType() == DependencyType.REQUIRED
-                    && (targetMod == null || !targetMod.isActive())) {
+            if ((modDependency.getDependencyType() == DependencyType.REQUIRED || modDependency.getDependencyType() == DependencyType.REQUIRED_REPLACEMENT)
+                    && (targetMod == null || !isModOrReplacementModActive(targetMod.getId()))) {
                 modStatuses.add(ModStatus.REQUIRE_DEPENDENCY);
-                modDependency.setHasError(true);
             } else if (modDependency.getDependencyType() == DependencyType.INCOMPATIBLE
                     && targetMod != null && targetMod.isActive()) {
                 modStatuses.add(ModStatus.INCOMPATIBLE_DEPENDENCY);
-                modDependency.setHasError(true);
             }
         }
 
@@ -367,10 +536,13 @@ public class ModService {
             modStatuses.add(ModStatus.MISSING_REQUIRED_STEAM_MOD);
         }
 
+        if (conflictSteamIds.getOrDefault(mod.getSteamMod().getSteamModId(), 0) > 1) {
+            modStatuses.add(ModStatus.STEAM_ID_DUPLICATE);
+        }
+
         if (modStatuses.isEmpty()) {
             modStatuses.add(ModStatus.OK);
         }
-        mod.setStatuses(modStatuses);
     }
 
     private boolean hasAllSteamRequiredModsInfos(Mod mod) {
@@ -385,11 +557,9 @@ public class ModService {
     }
 
 
-    List<Mod> sortModsForLoadOrder(List<Mod> mods) {
-        mods = new ArrayList<>(mods);
+    LinkedHashMap<String, Mod> sortModsForLoadOrder(Collection<Mod> inputMods) {
+        List<Mod> mods = new ArrayList<>(inputMods);
         mods.sort(Comparator.comparing(mod -> mod.getId().toLowerCase()));
-
-        LinkedHashMap<String, LinkedHashSet<String>> requiredModIgnoredByAlternativeModsMap = extractIgnoreRequiredMods(mods);
 
         //Set<String> ignoreRequiredModIds =;// mods.stream().map(v -> ).collect(Collectors.toSet());
 
@@ -404,71 +574,69 @@ public class ModService {
         }
 
         for (Map.Entry<HighlanderRunPriorityGroup, List<Mod>> entry : groupsMap.entrySet()) {
-            List<Mod> rootSortedMods = sortModsByRootConfigOnly(toLinkedHashMap(entry.getValue()), requiredModIgnoredByAlternativeModsMap);
+            List<Mod> rootSortedMods = sortModsByDeclaredHighlanderConfigOnly(toLinkedHashMap(entry.getValue()));
             entry.setValue(rootSortedMods);
         }
 
-        // now build final load order dependencies tree based on dependencies from first step by using all dependencies
-        //LinkedHashMap modsMap = toLinkedHashMap(groupsMap.values().stream().flatMap(Collection::stream));
         mods = groupsMap.values().stream().flatMap(Collection::stream).collect(Collectors.toList());
-        for (int i = 0; i < mods.size(); i++) {
-            Mod mod = mods.get(i);
-            for (ModDeclaredDependency declaredDependency : mod.getDeclaredDependencies()) {
-                if (declaredDependency.getTargetMod() == null || declaredDependency.getDependencyType() != DependencyType.REQUIRED) {
-                    continue;
-                }
-                appendLoadAfterRequiredMods(mod, declaredDependency.getTargetMod(), mod.getId(),
-                        requiredModIgnoredByAlternativeModsMap);
-            }
-
-            for (int j = i; j < mods.size(); j++) {
-                Mod laterMod = mods.get(j);
-                boolean isCurrentMod = i == j;
-                HighlanderModConfig modConfig = laterMod.getHighlanderModsConfig().getModConfigs().get(mod.getId());
-                if (modConfig != null) { // later mod may override previous mod
-                    if (modConfig.getRunPriorityGroup() != null) {
-                        ModLoadOrderGroupDeclaration loadOrderDeclaration = new ModLoadOrderGroupDeclaration();
-                        loadOrderDeclaration.setDeclaredInMod(laterMod.getId());
-                        loadOrderDeclaration.setModLoadOrderGroup(modConfig.getRunPriorityGroup());
-                        loadOrderDeclaration.setTargetMod(mod.getId());
-                        mod.addLoadOrderGroupDeclaration(loadOrderDeclaration);
-                    }
-
-                    if (!isCurrentMod) {
-                        for (String requiredMod : modConfig.getRequiredMods()) {
-                            ModLoadOrderDeclaration loadOrderDeclaration = new ModLoadOrderDeclaration();
-                            loadOrderDeclaration.setMod(mod.getId());
-                            loadOrderDeclaration.setDeclaredInMod(laterMod.getId());
-                            loadOrderDeclaration.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
-                            loadOrderDeclaration.setTargetMod(requiredMod);
-                            mod.addLoadOrderDeclaration(loadOrderDeclaration);
-
-                            LinkedHashSet<String> requiredModIgnoredByMods = requiredModIgnoredByAlternativeModsMap.getOrDefault(requiredMod, new LinkedHashSet<>());
-                            for (String requiredModIgnoredByMod : requiredModIgnoredByMods) {
-                                if (loadOrderDeclaration.getOverriddenByMod() == null) {
-                                    loadOrderDeclaration.setOverriddenByMod(requiredModIgnoredByMod);
-                                }
-                                ModLoadOrderDeclaration loadOrder2 = new ModLoadOrderDeclaration();
-                                loadOrder2.setMod(mod.getId());
-                                loadOrder2.setDeclaredInMod(laterMod.getId());
-                                loadOrder2.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
-                                loadOrder2.setTargetMod(requiredModIgnoredByMod);
-                                mod.addLoadOrderDeclaration(loadOrder2);
-                            }
-                        }
-                    }
-                    for (RunOrderDeclaration runOrder : modConfig.getRunOrderDeclarations()) {
-                        ModLoadOrderDeclaration loadOrderDeclaration = new ModLoadOrderDeclaration();
-                        loadOrderDeclaration.setMod(mod.getId());
-                        loadOrderDeclaration.setDeclaredInMod(laterMod.getId());
-                        loadOrderDeclaration.setModLoadOrder(runOrder.getModLoadOrder());
-                        loadOrderDeclaration.setTargetMod(runOrder.getTargetMod());
-                        mod.addLoadOrderDeclaration(loadOrderDeclaration);
-                    }
-                }
-            }
-        }
-
+//        for (int i = 0; i < mods.size(); i++) {
+//            Mod mod = mods.get(i);
+//            for (ModDeclaredDependency declaredDependency : mod.getDeclaredDependencies()) {
+//                if (declaredDependency.getTargetMod() == null || declaredDependency.getDependencyType() != DependencyType.REQUIRED) {
+//                    continue;
+//                }
+//                appendLoadAfterRequiredMods(mod, declaredDependency.getTargetMod(), mod.getId(),
+//                        requiredModIgnoredByAlternativeModsMap);
+//            }
+//
+//            for (int j = i; j < mods.size(); j++) {
+//                Mod laterMod = mods.get(j);
+//                boolean isCurrentMod = i == j;
+//                HighlanderModConfig modConfig = laterMod.getHighlanderModsConfig().getModConfigs().get(mod.getId());
+//                if (modConfig != null) { // later mod may override previous mod
+//                    if (modConfig.getRunPriorityGroup() != null) {
+//                        ModLoadOrderGroupDeclaration loadOrderDeclaration = new ModLoadOrderGroupDeclaration();
+//                        loadOrderDeclaration.setDeclaredInMod(laterMod.getId());
+//                        loadOrderDeclaration.setModLoadOrderGroup(modConfig.getRunPriorityGroup());
+//                        loadOrderDeclaration.setTargetMod(mod.getId());
+//                        mod.addLoadOrderGroupDeclaration(loadOrderDeclaration);
+//                    }
+//
+//                    if (!isCurrentMod) {
+//                        for (String requiredMod : modConfig.getRequiredMods()) {
+//                            ModLoadOrderDeclaration loadOrderDeclaration = new ModLoadOrderDeclaration();
+//                            loadOrderDeclaration.setMod(mod.getId());
+//                            loadOrderDeclaration.setDeclaredInMod(laterMod.getId());
+//                            loadOrderDeclaration.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
+//                            loadOrderDeclaration.setTargetMod(requiredMod);
+//                            mod.addLoadOrderDeclaration(loadOrderDeclaration);
+//
+//                            LinkedHashSet<String> requiredModIgnoredByMods = requiredModIgnoredByAlternativeModsMap.getOrDefault(requiredMod, new LinkedHashSet<>());
+//                            for (String requiredModIgnoredByMod : requiredModIgnoredByMods) {
+//                                if (loadOrderDeclaration.getOverriddenByMod() == null) {
+//                                    loadOrderDeclaration.setOverriddenByMod(requiredModIgnoredByMod);
+//                                }
+//                                ModLoadOrderDeclaration loadOrder2 = new ModLoadOrderDeclaration();
+//                                loadOrder2.setMod(mod.getId());
+//                                loadOrder2.setDeclaredInMod(laterMod.getId());
+//                                loadOrder2.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
+//                                loadOrder2.setTargetMod(requiredModIgnoredByMod);
+//                                mod.addLoadOrderDeclaration(loadOrder2);
+//                            }
+//                        }
+//                    }
+//                    for (RunOrderDeclaration runOrder : modConfig.getRunOrderDeclarations()) {
+//                        ModLoadOrderDeclaration loadOrderDeclaration = new ModLoadOrderDeclaration();
+//                        loadOrderDeclaration.setMod(mod.getId());
+//                        loadOrderDeclaration.setDeclaredInMod(laterMod.getId());
+//                        loadOrderDeclaration.setModLoadOrder(runOrder.getModLoadOrder());
+//                        loadOrderDeclaration.setTargetMod(runOrder.getTargetMod());
+//                        mod.addLoadOrderDeclaration(loadOrderDeclaration);
+//                    }
+//                }
+//            }
+//        }
+        // todo prepareFinalDependenciesAndLoadOrders remove above?
         groupsMap = new TreeMap<>();
         for (Mod mod : mods) {
             HighlanderModConfig config = mod.getHighlanderModsConfig().getModConfigs().get(mod.getId());
@@ -479,128 +647,92 @@ public class ModService {
         }
 
         // sort by using isolated RunPriorityGroups
+        // todo delete
+        LinkedHashMap<String, Mod> modsMap = toLinkedHashMap(mods);
+        prepareFinalDependenciesAndLoadOrders(modsMap);
         for (Map.Entry<HighlanderRunPriorityGroup, List<Mod>> entry : groupsMap.entrySet()) {
-            List<Mod> rootSortedMods = sortModsAfterRootSort(toLinkedHashMap(entry.getValue()), false);
-            entry.setValue(rootSortedMods);
+            List<Mod> preSortedMods = sortModsAfterPreSort(toLinkedHashMap(entry.getValue()), false);
+            entry.setValue(preSortedMods);
         }
 
         mods = groupsMap.values().stream().flatMap(Collection::stream).toList();
         // now sort by using only before/after/required/ignoreRequired and ignore groups on already sorted by groups
-        mods = sortModsAfterRootSort(toLinkedHashMap(mods), true);
+        modsMap = toLinkedHashMap(mods);
+        prepareFinalDependenciesAndLoadOrders(modsMap);
 
+        mods = sortModsAfterPreSort(toLinkedHashMap(mods), true);
 
-        return fillModsFieldsAfterLoadOrderSort(requiredModIgnoredByAlternativeModsMap, mods);
-    }
-
-    private void appendLoadAfterRequiredMods(Mod mod, String requiredModId, String declaredInMod,
-                                             LinkedHashMap<String, LinkedHashSet<String>> requiredModIgnoredByAlternativeModsMap) {
-        ModLoadOrderDeclaration loadOrderDeclaration = new ModLoadOrderDeclaration();
-        loadOrderDeclaration.setMod(mod.getId());
-        loadOrderDeclaration.setDeclaredInMod(declaredInMod);
-        loadOrderDeclaration.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
-        loadOrderDeclaration.setTargetMod(requiredModId);
-        mod.addLoadOrderDeclaration(loadOrderDeclaration);
-
-        LinkedHashSet<String> requiredModIgnoredByMods = requiredModIgnoredByAlternativeModsMap.getOrDefault(requiredModId, new LinkedHashSet<>());
-        for (String requiredModIgnoredByMod : requiredModIgnoredByMods) {
-            if (loadOrderDeclaration.getOverriddenByMod() == null) {
-                loadOrderDeclaration.setOverriddenByMod(requiredModIgnoredByMod);
+        List<Mod> inactiveMods = new ArrayList<>();
+        LinkedHashMap<String, Mod> result = new LinkedHashMap<>();
+        int activeModCounter = 1;
+        for (Mod mod : mods) {
+            if (mod.isActive()) {
+                mod.setLoadOrder(activeModCounter++);
+                result.put(mod.getId(), mod);
+            } else {
+                inactiveMods.add(mod);
+                mod.setLoadOrder(Mod.MOD_ORDER_DISABLED);
             }
-            ModLoadOrderDeclaration loadOrder2 = new ModLoadOrderDeclaration();
-            loadOrder2.setMod(mod.getId());
-            loadOrder2.setDeclaredInMod(declaredInMod);
-            loadOrder2.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
-            loadOrder2.setTargetMod(requiredModIgnoredByMod);
-            mod.addLoadOrderDeclaration(loadOrder2);
         }
+        inactiveMods.sort(Comparator.comparing(mod -> mod.getId().toLowerCase()));
+        for (Mod inactiveMod : inactiveMods) {
+            result.put(inactiveMod.getId(), inactiveMod);
+        }
+        return result;
     }
 
-    void resetModsLoadOrder() {
-
+    List<Mod> resolveRequiredSteamMods(SteamMod steamMod, LinkedHashMap<String, Mod> mods) {
+        ArrayList<Mod> result = new ArrayList<>(steamMod.getRequiredSteamMods().size());
+        for (SteamRequiredMod steamRequiredMod : steamMod.getRequiredSteamMods()) {
+            Mod requiredMod = steamModIdToModMap.get(steamRequiredMod.getSteamModId());
+            if (requiredMod != null) {
+                result.add(requiredMod);
+            }
+        }
+        return result;
     }
 
-    List<Mod> fillModsFieldsAfterLoadOrderSort(Map<String, LinkedHashSet<String>> requiredModIgnoredByAlternativeModsMap,
-                                               List<Mod> mods) {
-        // now set load order field on final mods loaded order
-        for (int i = 0; i < mods.size(); i++) {
-            mods.get(i).setLoadOrder(i + 1);
+    void prepareFinalDependenciesAndLoadOrders(LinkedHashMap<String, Mod> mods) {
+        // 1 reset
+        for (Mod mod : mods.values()) {
+            mod.getDependencies().clear();
+            mod.getLoadOrders().clear();
         }
+
+        // 2 prepare
+        for (Mod mod : mods.values()) {
+            prepareFinalDependenciesAndLoadOrders(mod, mods);
+        }
+
+        // 3 fill incoming dependencies from other mods
+        fillModsFieldsAfterLoadOrderSort(mods);
+    }
+
+    void fillModsFieldsAfterLoadOrderSort(LinkedHashMap<String, Mod> modsMap) {
 
         // fill incoming load order rules
-        HashMap<String, Mod> modsMap = toHashMap(mods);
-        for (Mod mod : mods) {
+        for (Mod mod : modsMap.values()) {
             for (ModLoadOrderDeclaration orderDeclaration : mod.getLoadOrders()) {
                 if (!orderDeclaration.getTargetMod().equals(mod.getId())) {
                     Mod targetMod = modsMap.get(orderDeclaration.getTargetMod());
                     if (targetMod != null) {
-                        targetMod.getLoadOrders().add(orderDeclaration);
+                        targetMod.addIncomingLoadOrderDeclaration(orderDeclaration);
                     }
                 }
-                if (!orderDeclaration.getMod().equals(mod.getId())) { // never happen?
-                    Mod targetMod = modsMap.get(orderDeclaration.getMod());
-                    if (targetMod != null) {
-                        if (!targetMod.getLoadOrders().contains(orderDeclaration)) {
-                            targetMod.getLoadOrders().add(orderDeclaration);
-                        }
-                    }
-                }
-            }
-        }
-
-        // fill mod dependencies
-        for (Mod declaredInMod : mods) {
-            for (HighlanderModConfig modConfig : declaredInMod.getHighlanderModsConfig().getModConfigs().values()) {
-                Mod mod = modsMap.get(modConfig.getMod());
-                if (mod == null) {
-                    continue;
-                }
-
-                for (String ignoreRequiredMod : modConfig.getIgnoreRequiredMods()) {
-                    ModDependency dependency = new ModDependency();
-                    dependency.setMod(mod.getId());
-                    dependency.setDeclaredInMod(declaredInMod.getId());
-                    dependency.setTargetMod(ignoreRequiredMod);
-                    dependency.setDependencyType(DependencyType.REPLACED);
-                    mod.addDependency(dependency);
-                }
-
-                for (String requiredMod : modConfig.getRequiredMods()) {
-                    ModDependency dependency = new ModDependency();
-                    dependency.setMod(mod.getId());
-                    dependency.setDeclaredInMod(declaredInMod.getId());
-                    dependency.setTargetMod(requiredMod);
-                    dependency.setDependencyType(DependencyType.REQUIRED);
-                    mod.addDependency(dependency);
-
-                    Collection<String> modsIgnoredRequiredMod = requiredModIgnoredByAlternativeModsMap.get(requiredMod);
-                    if (modsIgnoredRequiredMod != null) {
-                        for (String modIgnoredRequiredMod : modsIgnoredRequiredMod) {
-                            if (dependency.getOverriddenByMod() == null) {
-                                dependency.setOverriddenByMod(modIgnoredRequiredMod);
-                            }
-                            ModDependency dep2 = new ModDependency();
-                            dep2.setMod(mod.getId());
-                            dep2.setDeclaredInMod(modIgnoredRequiredMod); // todo not correct, but not really needed and can be fixed later
-                            dep2.setTargetMod(modIgnoredRequiredMod);
-                            dep2.setDependencyType(DependencyType.REQUIRED);
-                            mod.addDependency(dep2);
-                        }
-                    }
-                }
-
-                for (String incompatibleMod : modConfig.getIncompatibleMods()) {
-                    ModDependency dependency = new ModDependency();
-                    dependency.setMod(mod.getId());
-                    dependency.setDeclaredInMod(declaredInMod.getId());
-                    dependency.setTargetMod(incompatibleMod);
-                    dependency.setDependencyType(DependencyType.INCOMPATIBLE);
-                    mod.addDependency(dependency);
-                }
+                // todo check
+//                if (!orderDeclaration.getMod().equals(mod.getId())) { // never happen?
+//                    Mod targetMod = modsMap.get(orderDeclaration.getMod());
+//                    if (targetMod != null) {
+//                        if (!targetMod.getLoadOrders().contains(orderDeclaration)) {
+//                            targetMod.getLoadOrders().add(orderDeclaration);
+//                        }
+//                    }
+//                }
             }
         }
 
         // fill incoming dependencies
-        for (Mod mod : mods) {
+        for (Mod mod : modsMap.values()) {
             for (ModDependency modDependency : mod.getDependencies()) {
                 if (!modDependency.getTargetMod().equals(mod.getId())) {
                     Mod targetMod = modsMap.get(modDependency.getTargetMod());
@@ -608,27 +740,249 @@ public class ModService {
                         targetMod.addDependency(modDependency);
                     }
                 }
-                if (!modDependency.getMod().equals(mod.getId())) { // never happen?
-                    Mod targetMod = modsMap.get(modDependency.getMod());
-                    if (targetMod != null) {
-                        if (!targetMod.getDependencies().contains(modDependency)) {
-                            targetMod.addDependency(modDependency);
-                        }
-                    }
-                }
+//                if (!modDependency.getMod().equals(mod.getId())) { // never happen?
+//                    Mod targetMod = modsMap.get(modDependency.getMod());
+//                    if (targetMod != null) {
+//                        if (!targetMod.getDependencies().contains(modDependency)) {
+//                            targetMod.addDependency(modDependency);
+//                        }
+//                    }
+//                }
+            }
+        }
+    }
+
+    void prepareFinalDependenciesAndLoadOrders(Mod mod,
+                                               LinkedHashMap<String, Mod> mods) {
+
+        // 1 fill steam dependencies as lowest priority
+        for (Mod requiredSteamMod : resolveRequiredSteamMods(mod.getSteamMod(), mods)) {
+            fillRequiredModDependencyAndLoadOrder(mod, requiredSteamMod.getId(), mod.getId(), DeclarationSource.STEAM);
+        }
+
+        // 2 Fill highlander dependencies and run orders
+        for (Mod anotherMod : mods.values()) { // fill by current order after highlander pre sorting
+            boolean isCurrentMod = mod == anotherMod;
+            HighlanderModConfig modConfig = anotherMod.getHighlanderModsConfig().getModConfigs().get(mod.getId());
+            if (modConfig == null) {
+                continue;
+            }
+            if (modConfig.getRunPriorityGroup() != null) {
+                ModHighlanderGroupLoadOrder groupLoadOrder = new ModHighlanderGroupLoadOrder();
+                groupLoadOrder.setMod(mod.getId());
+                groupLoadOrder.setPriorityGroup(modConfig.getRunPriorityGroup());
+                groupLoadOrder.setDeclaredInMod(anotherMod.getId());
+                groupLoadOrder.setActive(mod.isActive() && anotherMod.isActive()); // both must be active for group
+                mod.addHighlanderGroupLoadOrder(groupLoadOrder);
+            }
+
+            for (String requiredMod : modConfig.getRequiredMods()) {
+                fillRequiredModDependencyAndLoadOrder(mod, requiredMod, anotherMod.getId(), DeclarationSource.HIGHLANDER);
+            }
+
+            for (String replacedMod : modConfig.getIgnoreRequiredMods()) {
+                ModLoadOrderDeclaration loadOrder = new ModLoadOrderDeclaration();
+                loadOrder.setMod(mod.getId());
+                loadOrder.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
+                loadOrder.setTargetMod(replacedMod);
+                loadOrder.setDeclaredInMod(anotherMod.getId());
+                loadOrder.getSources().add(DeclarationSource.HIGHLANDER);
+                loadOrder.setActive(mod.isActive() && isModActive(replacedMod));
+                loadOrder.setHasError(false);
+                mod.addLoadOrder(loadOrder);
+            }
+
+            for (String incompatibleMod : modConfig.getIncompatibleMods()) {
+                ModDependency modDependency = new ModDependency();
+                modDependency.setMod(mod.getId());
+                modDependency.setDeclaredInMod(mod.getId());
+                modDependency.setDependencyType(DependencyType.INCOMPATIBLE);
+                modDependency.setTargetMod(incompatibleMod);
+                modDependency.getSources().add(DeclarationSource.HIGHLANDER);
+                modDependency.setActive(mod.isActive() && isModActive(incompatibleMod));
+                modDependency.setHasError(modDependency.isActive() && isModActive(incompatibleMod));
+                mod.addDependency(modDependency);
+            }
+
+            for (RunOrderDeclaration runOrderDeclaration : modConfig.getRunOrderDeclarations()) {
+                ModLoadOrderDeclaration loadOrder = new ModLoadOrderDeclaration();
+                loadOrder.setMod(mod.getId());
+                loadOrder.setModLoadOrder(runOrderDeclaration.getModLoadOrder());
+                loadOrder.setTargetMod(runOrderDeclaration.getTargetMod());
+                loadOrder.setDeclaredInMod(anotherMod.getId());
+                loadOrder.getSources().add(DeclarationSource.HIGHLANDER);
+                loadOrder.setActive(mod.isActive() && anotherMod.isActive());
+                mod.addLoadOrder(loadOrder);
             }
         }
 
-        return mods;
+        // 3 Fill User defined dependencies and run orders as final priority
+        List<UserRuleDeclaration> userModRules = userRulesByMod.getOrDefault(mod.getId(), List.of());
+        for (UserRuleDeclaration userModRule : userModRules) {
+            if (userModRule.getType() == UserRuleDeclaration.RuleType.REQUIRED) {
+                fillRequiredModDependencyAndLoadOrder(mod, userModRule.getTargetModId(), mod.getId(), DeclarationSource.USER);
+            } else {
+                ModLoadOrder loadOrderType = userModRule.getType().toLoadOrder();
+                if (loadOrderType != null) {
+                    ModLoadOrderDeclaration loadOrder = new ModLoadOrderDeclaration();
+                    loadOrder.setMod(mod.getId());
+                    loadOrder.setModLoadOrder(loadOrderType);
+                    loadOrder.setTargetMod(userModRule.getTargetModId());
+                    loadOrder.setDeclaredInMod(mod.getId());
+                    loadOrder.getSources().add(DeclarationSource.USER);
+                    loadOrder.setActive(mod.isActive() && isModActive(userModRule.getTargetModId()));
+                    loadOrder.setHasError(false);
+                    mod.addLoadOrder(loadOrder);
+                }
+            }
+        }
     }
+
+    private void fillRequiredModDependencyAndLoadOrder(Mod mod,
+                                                       String requiredMod,
+                                                       String requiredModDeclaredInMod,
+                                                       DeclarationSource source) {
+        ModDependency modDependency = new ModDependency();
+        modDependency.setMod(mod.getId());
+        modDependency.setDeclaredInMod(requiredModDeclaredInMod);
+        modDependency.setDependencyType(DependencyType.REQUIRED);
+        modDependency.setTargetMod(requiredMod);
+        modDependency.getSources().add(source);
+        modDependency.setActive(mod.isActive());
+        modDependency.setHasError(!isModOrReplacementModActive(requiredMod));
+        mod.addDependency(modDependency);
+
+        ModLoadOrderDeclaration loadOrder = new ModLoadOrderDeclaration();
+        loadOrder.setMod(mod.getId());
+        loadOrder.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
+        loadOrder.setTargetMod(requiredMod);
+        loadOrder.setDeclaredInMod(requiredModDeclaredInMod);
+        loadOrder.getSources().add(source);
+        loadOrder.setActive(mod.isActive());
+        loadOrder.setHasError(!isModOrReplacementModActive(requiredMod));
+        mod.addLoadOrder(loadOrder);
+
+        List<ReplacedByMod> requiredModIgnoredByMods = replacedByModIdToModMap.getOrDefault(requiredMod, List.of());
+        for (ReplacedByMod requiredModReplacedByMod : requiredModIgnoredByMods) {
+            boolean replacedByModActive = isModActive(requiredModReplacedByMod.getReplacedByMod());
+
+            ModDependency modDependency2 = new ModDependency();
+            modDependency2.setMod(mod.getId());
+            modDependency2.setDeclaredInMod(requiredModReplacedByMod.getDeclaredInMod());
+            modDependency2.setDependencyType(DependencyType.REQUIRED_REPLACEMENT);
+            modDependency2.setTargetMod(requiredModReplacedByMod.getReplacedByMod());
+            modDependency2.getSources().add(DeclarationSource.HIGHLANDER);
+            modDependency2.setActive(mod.isActive() && replacedByModActive);
+            modDependency2.setHasError(!isModOrReplacementModActive(requiredMod));
+            mod.addDependency(modDependency2);
+
+            if (modDependency.getOverriddenByMod() == null && modDependency2.isActive() && !isModActive(requiredMod)) {
+                modDependency.setOverriddenByMod(modDependency2.getTargetMod());
+                loadOrder.setOverriddenByMod(modDependency2.getTargetMod());
+            }
+
+            ModLoadOrderDeclaration loadOrder2 = new ModLoadOrderDeclaration();
+            loadOrder2.setMod(mod.getId());
+            loadOrder2.setDeclaredInMod(requiredModReplacedByMod.getDeclaredInMod());
+            loadOrder2.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED_REPLACEMENT);
+            loadOrder2.setTargetMod(requiredModReplacedByMod.getReplacedByMod());
+            loadOrder2.setActive(mod.isActive() && replacedByModActive);
+            loadOrder2.setHasError(modDependency2.isActive() && !isModOrReplacementModActive(requiredMod));
+            loadOrder2.getSources().add(DeclarationSource.HIGHLANDER);
+            mod.addLoadOrder(loadOrder2);
+        }
+    }
+
+//    void prepareFinalDependenciesAndLoadOrders(Map<String, LinkedHashSet<String>> requiredModReplacedByAlternativeModsMap,
+//                                               LinkedHashMap<String, Mod> mods) {
+//        for (int i = 0; i < mods.size(); i++) {
+//            Mod mod = mods.get(i);
+//            for (ModDeclaredDependency declaredDependency : mod.getDeclaredDependencies()) {
+//                if (declaredDependency.getTargetMod() == null || declaredDependency.getDependencyType() != DependencyType.REQUIRED) {
+//                    continue;
+//                }
+//                appendLoadAfterRequiredMods(mod, declaredDependency.getTargetMod(), mod.getId(),
+//                        requiredModReplacedByAlternativeModsMap);
+//            }
+//
+//            for (int j = i; j < mods.size(); j++) {
+//                Mod laterMod = mods.get(j);
+//                boolean isCurrentMod = i == j;
+//                HighlanderModConfig modConfig = laterMod.getHighlanderModsConfig().getModConfigs().get(mod.getId());
+//                if (modConfig != null) { // later mod may override previous mod
+//                    if (modConfig.getRunPriorityGroup() != null) {
+//                        ModLoadOrderGroupDeclaration loadOrderDeclaration = new ModLoadOrderGroupDeclaration();
+//                        loadOrderDeclaration.setDeclaredInMod(laterMod.getId());
+//                        loadOrderDeclaration.setModLoadOrderGroup(modConfig.getRunPriorityGroup());
+//                        loadOrderDeclaration.setTargetMod(mod.getId());
+//                        mod.addLoadOrderGroupDeclaration(loadOrderDeclaration);
+//                    }
+//
+//                    if (!isCurrentMod) {
+//                        for (String requiredMod : modConfig.getRequiredMods()) {
+//                            ModLoadOrderDeclaration loadOrderDeclaration = new ModLoadOrderDeclaration();
+//                            loadOrderDeclaration.setMod(mod.getId());
+//                            loadOrderDeclaration.setDeclaredInMod(laterMod.getId());
+//                            loadOrderDeclaration.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
+//                            loadOrderDeclaration.setTargetMod(requiredMod);
+//                            mod.addLoadOrderDeclaration(loadOrderDeclaration);
+//
+//                            LinkedHashSet<String> requiredModIgnoredByMods = requiredModReplacedByAlternativeModsMap.getOrDefault(requiredMod, new LinkedHashSet<>());
+//                            for (String requiredModIgnoredByMod : requiredModIgnoredByMods) {
+//                                if (loadOrderDeclaration.getOverriddenByMod() == null) {
+//                                    loadOrderDeclaration.setOverriddenByMod(requiredModIgnoredByMod);
+//                                }
+//                                ModLoadOrderDeclaration loadOrder2 = new ModLoadOrderDeclaration();
+//                                loadOrder2.setMod(mod.getId());
+//                                loadOrder2.setDeclaredInMod(laterMod.getId());
+//                                loadOrder2.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
+//                                loadOrder2.setTargetMod(requiredModIgnoredByMod);
+//                                mod.addLoadOrderDeclaration(loadOrder2);
+//                            }
+//                        }
+//                    }
+//                    for (RunOrderDeclaration runOrder : modConfig.getRunOrderDeclarations()) {
+//                        ModLoadOrderDeclaration loadOrderDeclaration = new ModLoadOrderDeclaration();
+//                        loadOrderDeclaration.setMod(mod.getId());
+//                        loadOrderDeclaration.setDeclaredInMod(laterMod.getId());
+//                        loadOrderDeclaration.setModLoadOrder(runOrder.getModLoadOrder());
+//                        loadOrderDeclaration.setTargetMod(runOrder.getTargetMod());
+//                        mod.addLoadOrderDeclaration(loadOrderDeclaration);
+//                    }
+//                }
+//            }
+//        }
+//    }
+//
+//    private void appendLoadAfterRequiredMods(Mod mod, String requiredModId, String declaredInMod,
+//                                             Map<String, LinkedHashSet<String>> requiredModIgnoredByAlternativeModsMap) {
+//        ModLoadOrderDeclaration loadOrderDeclaration = new ModLoadOrderDeclaration();
+//        loadOrderDeclaration.setMod(mod.getId());
+//        loadOrderDeclaration.setDeclaredInMod(declaredInMod);
+//        loadOrderDeclaration.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
+//        loadOrderDeclaration.setTargetMod(requiredModId);
+//        mod.addLoadOrderDeclaration(loadOrderDeclaration);
+//
+//        LinkedHashSet<String> requiredModIgnoredByMods = requiredModIgnoredByAlternativeModsMap.getOrDefault(requiredModId, new LinkedHashSet<>());
+//        for (String requiredModIgnoredByMod : requiredModIgnoredByMods) {
+//            if (loadOrderDeclaration.getOverriddenByMod() == null) {
+//                loadOrderDeclaration.setOverriddenByMod(requiredModIgnoredByMod);
+//            }
+//            ModLoadOrderDeclaration loadOrder2 = new ModLoadOrderDeclaration();
+//            loadOrder2.setMod(mod.getId());
+//            loadOrder2.setDeclaredInMod(declaredInMod);
+//            loadOrder2.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
+//            loadOrder2.setTargetMod(requiredModIgnoredByMod);
+//            mod.addLoadOrderDeclaration(loadOrder2);
+//        }
+//    }
 
     /**
      * Sort by before/after/required/ignoreRequired without priority group at first step.
      * @param mods
      * @return
      */
-    List<Mod> sortModsByRootConfigOnly(LinkedHashMap<String, Mod> mods,
-                                       LinkedHashMap<String, LinkedHashSet<String>> requiredModIgnoredByAlternativeModsMap) {
+    List<Mod> sortModsByDeclaredHighlanderConfigOnly(LinkedHashMap<String, Mod> mods) {
         LinkedHashMap<String, SortItem<String>> sortItemMap = new LinkedHashMap<>(mods.size());
         for (Mod mod : mods.values()) {
             SortItem<String> sortItem = new SortItem<>();
@@ -657,11 +1011,11 @@ public class ModService {
                         && !sortItem.getAfterValues().contains(requiredModId)) {
                     // assume required mod should be loaded before
                     sortItem.getBeforeValues().add(requiredModId);
-                    LinkedHashSet<String> requiredModIgnoredByMods = requiredModIgnoredByAlternativeModsMap.getOrDefault(requiredModId, new LinkedHashSet<>());
-                    for (String requiredModIgnoredByMod : requiredModIgnoredByMods) {
+                    List<ReplacedByMod> requiredModIgnoredByMods = replacedByModIdToModMap.getOrDefault(requiredModId, List.of());
+                    for (ReplacedByMod requiredModIgnoredByMod : requiredModIgnoredByMods) {
                         if (!sortItem.getBeforeValues().contains(requiredModIgnoredByMod)
                                 && !sortItem.getAfterValues().contains(requiredModIgnoredByMod)) {
-                            sortItem.getBeforeValues().add(requiredModIgnoredByMod);
+                            sortItem.getBeforeValues().add(requiredModIgnoredByMod.replacedByMod);
                         }
                     }
                 }
@@ -678,13 +1032,26 @@ public class ModService {
         return sortResult.getSorted().stream().map(mods::get).collect(Collectors.toList());
     }
 
-    List<Mod> sortModsAfterRootSort(LinkedHashMap<String, Mod> mods, boolean setCycleModsToMods) {
+    List<Mod> sortModsAfterPreSort(LinkedHashMap<String, Mod> mods, boolean setCycleModsToMods) {
         LinkedHashMap<String, SortItem<String>> sortItemMap = new LinkedHashMap<>(mods.size());
+        List<Mod> inactiveMods = new ArrayList<>(mods.size());
+        List<Mod> activeMods = new ArrayList<>(mods.size());
         for (Mod mod : mods.values()) {
+            if (!mod.isActive()) {
+                inactiveMods.add(mod);
+                continue;
+            }
+            activeMods.add(mod);
             SortItem<String> sortItem = new SortItem<>();
             sortItem.setValue(mod.getId());
             for (ModLoadOrderDeclaration loadOrderDeclaration : mod.getLoadOrders()) {
-                if (loadOrderDeclaration.getOverriddenByMod() == null && loadOrderDeclaration.getModLoadOrder() != null) {
+                if (loadOrderDeclaration.isActive() && loadOrderDeclaration.getMod().equals(mod.getId())) {
+                    if (Objects.equals(loadOrderDeclaration.getMod(), loadOrderDeclaration.getTargetMod())) {
+                        loadOrderDeclaration.setHasError(true);
+                        // mod.getCycleMods().add(List.of(mod)); lets just ignore as it doesn't make sense
+                        log.warn("Mod {} self cycle reference detected", mod.getId());
+                        continue;
+                    }
                     if (loadOrderDeclaration.getModLoadOrder().isLoadBefore()) {
                         sortItem.getBeforeValues().add(loadOrderDeclaration.getTargetMod());
                     } else if (loadOrderDeclaration.getModLoadOrder().isLoadAfter()) {
@@ -708,7 +1075,20 @@ public class ModService {
             }
         }
 
-        return sortResult.getSorted().stream().map(mods::get).collect(Collectors.toList());
+        List<Mod> result = new ArrayList<>(mods.size());
+        sortResult.getSorted().stream().map(mods::get).forEach(result::add);
+        result.addAll(inactiveMods);
+
+        HashSet<String> sortedMods = new HashSet<>(sortResult.getSorted());
+        for (Mod mod : activeMods) {
+            if (!sortedMods.contains(mod.getId())) {
+                log.error("Failed to sort mod: {}", mod.getId());
+                result.add(mod);
+                mod.getStatuses().add(ModStatus.LOAD_ORDER_ERROR);
+            }
+        }
+
+        return result;
     }
 
     void setModsMapAfterParsingFromDirs(List<Mod> mods) {
@@ -736,10 +1116,12 @@ public class ModService {
                     mod.setSize(modDbRecord.getSizeBytes());
                 }
             }
-            if (modDbRecord.getSteamModId() != null) {
+            mod.setSteamDbModId(modDbRecord.getSteamModId());
+            if (mod.getSteamDbModId() != null) {
                 mod.getSteamMod().setSteamModId(modDbRecord.getSteamModId());
             }
-            mod.setActive(modDbRecord.getActive());
+            mod.setActive(modDbRecord.getIsActive());
+            mod.setNewMod(modDbRecord.getIsNew());
         }
 
         allMods = map;
@@ -811,6 +1193,7 @@ public class ModService {
             if (isSteamWorkshopMod) {
                 try {
                     mod.getSteamMod().setSteamModId(modFile.getParentFile().getName());
+                    mod.setSteamModIdByDirName(mod.getSteamMod().getSteamModId());
                 } catch (Exception e) {
                     log.error("Failed to parse steam mod ID from dir name: {}", modFile.getParentFile().getName(), e);
                 }
@@ -860,6 +1243,18 @@ public class ModService {
     public boolean isModActive(String modId) {
         Mod mod = allMods.get(modId);
         return mod != null && mod.isActive();
+    }
+
+    public boolean isModOrReplacementModActive(String modId) {
+        Mod mod = allMods.get(modId);
+        if (mod != null && mod.isActive()) {
+            return true;
+        }
+        List<ReplacedByMod> replacedByMods = replacedByModIdToModMap.get(modId);
+        if (replacedByMods == null) {
+            return false;
+        }
+        return replacedByMods.stream().anyMatch(v -> isModActive(v.getReplacedByMod()));
     }
 
     public boolean isModExist(String targetModId) {

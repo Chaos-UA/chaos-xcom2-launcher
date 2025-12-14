@@ -1,6 +1,8 @@
 package chaos.xcom.launcher.gui;
 
 import chaos.xcom.launcher.db.property.DbProperties;
+import chaos.xcom.launcher.event.EventPublisher;
+import chaos.xcom.launcher.event.SkinChangeEvent;
 import chaos.xcom.launcher.swing.SwingService;
 import com.formdev.flatlaf.*;
 import com.formdev.flatlaf.intellijthemes.FlatAllIJThemes;
@@ -27,6 +29,7 @@ public class LookAndFeelService {
     @Getter
     private final List<String> lookAndFeels = new ArrayList<>();
     private final DbProperties dbProps;
+    private final EventPublisher eventPublisher;
     private final Instance<JFrame> frameInstance;
 
     @PostConstruct
@@ -49,10 +52,15 @@ public class LookAndFeelService {
         }
 
         lookAndFeels.sort(String::compareTo);
-        applyLookAndFeel(getCurrentLookAndFeel());
+        // don't send event on startup to not blink main window
+        applyLookAndFeel(getCurrentLookAndFeel(), false);
     }
 
     public void applyLookAndFeel(String className) {
+        applyLookAndFeel(className, true);
+    }
+
+    public void applyLookAndFeel(String className, boolean sendEvent) {
         try {
             UIManager.setLookAndFeel(className);
             dbProps.guiSkin.set(className);
@@ -61,6 +69,9 @@ public class LookAndFeelService {
                 for (JFrame frame : frameInstance) {
                     SwingUtilities.updateComponentTreeUI(frame);
                     log.info("Updated component tree UI: {}", frame.getClass().getName());
+                }
+                if (sendEvent) {
+                    eventPublisher.publishAsync(new SkinChangeEvent());
                 }
             });
         } catch (Exception e) {

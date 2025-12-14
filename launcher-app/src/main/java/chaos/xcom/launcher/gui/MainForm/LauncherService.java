@@ -8,7 +8,7 @@ import javax.swing.*;
 
 @Singleton
 @Slf4j
-public class MainFormService {
+public class LauncherService {
 
     public void exitApp() {
         int result = JOptionPane.showConfirmDialog(SwingService.getLastActiveWindowBounds(),

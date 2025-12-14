@@ -1,20 +1,12 @@
 package chaos.xcom.launcher.util;
 
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-
 import javax.swing.*;
 import java.awt.*;
 
-@RequiredArgsConstructor
-@Getter
-public enum ColorConstant {
-    ERROR(new Color(255, 0, 0, 120)),
-    DISABLED_MOD(new Color(255, 102, 102))
-    ;
 
-
-    private final Color color;
+public class ColorConstant {
+    public static final Color ERROR = new Color(255, 123, 123);
+    public static final Color NEW_MOD = new Color(206, 255, 206);
 
     public static Color getLabelDisabledForegroundColor() {
         return UIManager.getColor("Label.disabledForeground");

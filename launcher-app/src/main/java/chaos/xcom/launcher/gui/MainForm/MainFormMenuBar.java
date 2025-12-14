@@ -10,15 +10,13 @@ import jakarta.inject.Singleton;
 import lombok.RequiredArgsConstructor;
 
 import javax.swing.*;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 
 @Singleton
 @RequiredArgsConstructor
 public class MainFormMenuBar extends JMenuBar {
 
     private final SettingsService settingsService;
-    private final MainFormService mainFormService;
+    private final LauncherService launcherService;
     private final GameService gameService;
     private final Provider<ModService> modService;
 
@@ -52,7 +50,7 @@ public class MainFormMenuBar extends JMenuBar {
         fileMenu.addSeparator();
         JMenuItem menuItem = new JMenuItem("Exit");
         fileMenu.add(menuItem);
-        menuItem.addActionListener(e -> mainFormService.exitApp());
+        menuItem.addActionListener(e -> launcherService.exitApp());
 
 
         this.add(fileMenu);
@@ -64,6 +62,7 @@ public class MainFormMenuBar extends JMenuBar {
 
         JMenuItem startXcomItem = new JMenuItem("Play XCOM2");
         startXcomItem.setIcon(ImageUtils.scaleIconForMenu(ImageUtils.WOTC_ICON));
+        startXcomItem.setToolTipText("Play XCOM2 with active mods");
         this.add(startXcomItem);
         startXcomItem.addActionListener(e -> gameService.startGame());
 

@@ -1,7 +1,8 @@
 package chaos.xcom.launcher.mod.dto;
 
-import chaos.xcom.launcher.steam.SteamMod;
 import lombok.Data;
+
+import java.util.TreeSet;
 
 @Data
 public class ModDependency {
@@ -10,6 +11,7 @@ public class ModDependency {
     private String targetMod;
     private String declaredInMod;
     private String overriddenByMod;
-    private DeclarationSource source;
+    private TreeSet<DeclarationSource> sources = new TreeSet<>();
+    private boolean isActive;
     private boolean hasError;
 }

@@ -10,6 +10,8 @@ import io.quarkus.runtime.annotations.QuarkusMain;
 import lombok.extern.slf4j.Slf4j;
 
 import javax.swing.*;
+import java.awt.*;
+import java.awt.event.MouseEvent;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
@@ -18,6 +20,9 @@ public class ChaosXcomLauncherStarter implements QuarkusApplication {
 
     public static void main(String[] args) throws Exception {
         UIManager.setLookAndFeel(FlatIntelliJLaf.class.getName());
+        ToolTipManager.sharedInstance().setInitialDelay(0);
+        ToolTipManager.sharedInstance().setReshowDelay(0);
+
         Quarkus.run(ChaosXcomLauncherStarter.class, args);
         log.info("Application started");
     }

@@ -369,22 +369,22 @@
                 </constraints>
                 <properties/>
               </component>
-              <component id="6cfc0" class="javax.swing.JCheckBox" binding="cbCalculateModSizeOnReload">
-                <constraints>
-                  <grid row="3" column="0" row-span="1" col-span="3" vsize-policy="0" hsize-policy="3" anchor="8" fill="0" indent="0" use-parent-layout="false"/>
-                </constraints>
-                <properties>
-                  <enabled value="false"/>
-                  <selected value="true"/>
-                  <text value="Calculate mod directory size on reload"/>
-                </properties>
-              </component>
               <component id="39b77" class="javax.swing.JCheckBox" binding="cbSyncMissingSteamModsOnModsReload">
                 <constraints>
                   <grid row="2" column="0" row-span="1" col-span="3" vsize-policy="0" hsize-policy="3" anchor="8" fill="0" indent="0" use-parent-layout="false"/>
                 </constraints>
                 <properties>
                   <text value="Sync missing Steam info for mods on mods reload"/>
+                </properties>
+              </component>
+              <component id="bd198" class="javax.swing.JCheckBox" binding="cbGameLogEnabled">
+                <constraints>
+                  <grid row="3" column="0" row-span="1" col-span="2" vsize-policy="0" hsize-policy="3" anchor="8" fill="0" indent="0" use-parent-layout="false"/>
+                </constraints>
+                <properties>
+                  <enabled value="true"/>
+                  <text value="xcom-game.log"/>
+                  <toolTipText value="If enabled and game started via launcher then output form process will be written to the file in launcher directory"/>
                 </properties>
               </component>
             </children>

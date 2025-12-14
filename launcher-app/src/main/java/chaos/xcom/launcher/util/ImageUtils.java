@@ -10,6 +10,7 @@ import java.net.URL;
 public class ImageUtils {
     public static final ImageIcon WOTC_ICON = loadResourceImage("/image/wotc.png");
     public static final FlatSVGIcon REFRESH_ICON = loadResourceSvgImage("/image/refresh.svg");
+    public static final FlatSVGIcon SEARCH_ICON = loadResourceSvgImage("/image/search.svg");
 
     private static FlatSVGIcon loadResourceSvgImage(String path) {
         URL iconURL = ImageUtils.class.getResource(path);
