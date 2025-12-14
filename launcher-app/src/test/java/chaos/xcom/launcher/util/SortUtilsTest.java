@@ -214,6 +214,77 @@ class SortUtilsTest {
         assertTrue(indexM < indexN && indexN < indexO);
     }
 
+
+    @Test
+    void testDependOnModFromCycle() {
+        // Cycle1: A -> B -> A
+        SortItem<String> a = new SortItem<>();
+        a.setValue("1");
+        a.getBeforeValues().add("2");
+
+        SortItem<String> b = new SortItem<>();
+        b.setValue("2");
+        b.getBeforeValues().add("3");
+
+        // Cycle2: C -> D -> E -> C
+        SortItem<String> c = new SortItem<>();
+        c.setValue("3");
+        c.getBeforeValues().add("4");
+
+        SortItem<String> d = new SortItem<>();
+        d.setValue("4");
+        d.getBeforeValues().add("2");
+
+        SortItem<String> e = new SortItem<>();
+        e.setValue("5");
+        e.getAfterValues().add("3");
+
+        SortItem<String> i6 = new SortItem<>();
+        i6.setValue("6");
+        i6.getBeforeValues().add("3");
+
+
+        List<SortItem<String>> items = List.of(a, b, c, d, e, i6
+        );
+        SortResult<String> result = SortUtils.sort(items);
+        List<String> sorted = result.getSorted();
+
+        // 1️⃣ Total items
+        assertEquals(items.size(), sorted.size());
+        assertTrue(sorted.containsAll(List.of("1", "2", "3", "4", "5", "6")));
+
+        // 2️⃣ One cycle detected
+        assertEquals(1, result.getCycles().size());
+        List<String> cycle = result.getCycles().get(0);
+        assertTrue(cycle.containsAll(List.of("2", "3", "4")));
+
+        // 3️⃣ Ordering constraints
+
+        // 1 must be before 2
+        assertTrue(sorted.indexOf("1") < sorted.indexOf("2"));
+
+        // 6 must be before 3 (depends on cycle)
+        assertTrue(sorted.indexOf("6") < sorted.indexOf("3"));
+
+        // 5 must be after 3 (depends on cycle)
+        assertTrue(sorted.indexOf("5") > sorted.indexOf("3"));
+
+        // Entire cycle must be between 6 and 5
+        int minCycleIndex = cycle.stream()
+                .mapToInt(sorted::indexOf)
+                .min()
+                .orElseThrow();
+
+        int maxCycleIndex = cycle.stream()
+                .mapToInt(sorted::indexOf)
+                .max()
+                .orElseThrow();
+
+        assertTrue(sorted.indexOf("6") < minCycleIndex);
+        assertTrue(sorted.indexOf("5") > maxCycleIndex);
+    }
+
+
 //    @Test
 //    public void testSortWithMultipleCycles() {
 //        List<SortItem<String>> items = new ArrayList<>();
