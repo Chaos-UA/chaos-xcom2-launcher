@@ -22,6 +22,7 @@ public class UserRuleDeclaration {
     public static enum RuleType {
         REQUIRED,
         REPLACED,
+        INCOMPATIBLE,
         BEFORE,
         AFTER;
 

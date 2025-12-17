@@ -500,6 +500,14 @@ public class ModService {
                     declaredDependency.setDependencyType(DependencyType.REPLACED);
                     declaredDependency.getSources().add(DeclarationSource.USER);
                     mod.addDeclaredDependency(declaredDependency);
+                } else if (ruleDeclaration.getType() == UserRuleDeclaration.RuleType.INCOMPATIBLE) {
+                    // user declared incompatible mod
+                    ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
+                    declaredDependency.setMod(ruleDeclaration.getModId());
+                    declaredDependency.setTargetMod(ruleDeclaration.getTargetModId());
+                    declaredDependency.setDependencyType(DependencyType.INCOMPATIBLE);
+                    declaredDependency.getSources().add(DeclarationSource.USER);
+                    mod.addDeclaredDependency(declaredDependency);
                 }
             }
         }
@@ -851,6 +859,16 @@ public class ModService {
                 loadOrder.setActive(mod.isActive() && isModActive(userModRule.getTargetModId()));
                 loadOrder.setHasError(false);
                 mod.addLoadOrder(loadOrder);
+            } else if (userModRule.getType() == UserRuleDeclaration.RuleType.INCOMPATIBLE) {
+                ModDependency modDependency = new ModDependency();
+                modDependency.setMod(mod.getId());
+                modDependency.setDeclaredInMod(mod.getId());
+                modDependency.setDependencyType(DependencyType.INCOMPATIBLE);
+                modDependency.setTargetMod(userModRule.getTargetModId());
+                modDependency.getSources().add(DeclarationSource.USER);
+                modDependency.setActive(mod.isActive() && isModActive(userModRule.getTargetModId()));
+                modDependency.setHasError(modDependency.isActive() && isModActive(userModRule.getTargetModId()));
+                mod.addDependency(modDependency);
             } else {
                 ModLoadOrder loadOrderType = userModRule.getType().toLoadOrder();
                 if (loadOrderType != null) {

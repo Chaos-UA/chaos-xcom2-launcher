@@ -36,7 +36,7 @@ public class EditModDependencyDialog extends JDialog {
                                    Map<String, List<UserRuleDeclaration>> userRulesByMod,
                                    Map<String, List<UserRuleDeclaration>> userRulesByTargetMod) {
         $$$setupUI$$$();
-        setTitle("Edit user mod dependencies");
+        setTitle("Edit custom user mod dependencies");
         setContentPane(contentPane);
         setModal(true);
         setMinimumSize(new Dimension(500, 300));
