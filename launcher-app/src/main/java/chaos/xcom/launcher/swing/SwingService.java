@@ -80,6 +80,21 @@ public class SwingService {
         return result;
     }
 
+    public boolean isWindowVisibleOnAnyScreen(Window window) {
+        java.awt.Rectangle windowRect = window.getBounds();
+
+        GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+        for (GraphicsDevice gd : ge.getScreenDevices()) {
+            GraphicsConfiguration gc = gd.getDefaultConfiguration();
+            java.awt.Rectangle screenBounds = gc.getBounds();
+
+            if (screenBounds.intersects(windowRect)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Generates a stable unique key for each split pane
     private String buildSplitPaneKey(String windowKey, int index) {
         return windowKey + ".split." + index;
@@ -94,6 +109,9 @@ public class SwingService {
         if (r != null) {
             window.setBounds(r.toAwtRectangle());
             log.debug("{} {} restored bounds: {}", window.getClass().getSimpleName(), key, r);
+        }
+        if (!isWindowVisibleOnAnyScreen(window)) {
+            window.setLocationRelativeTo(null);
         }
         window.addComponentListener(new ComponentAdapter() {
             @Override
