@@ -371,9 +371,10 @@ public class ModService {
         for (Mod mod : allMods.values()) {
             mod.clearStateForLoadOrderCalculation();
         }
+        // load user rules first so replacements declared by user are included into replacedBy map
+        resetAndFillUserDeclarationRules();
         resetIgnoreRequiredReplacements();
         fillSteamMods(allMods);
-        resetAndFillUserDeclarationRules();
         resetModsDependencies(allMods);
 
         LinkedHashMap<String, Mod> loadOrderSortedMods = sortModsForLoadOrder(allMods.values());
@@ -422,7 +423,17 @@ public class ModService {
     }
 
     private void resetIgnoreRequiredReplacements() {
+        // start with highlander-defined replacements
         replacedByModIdToModMap = extractIgnoreRequiredMods(allMods.values());
+        // include user-declared REPLACED rules so they behave similarly to highlander ignoreRequired
+        for (List<UserRuleDeclaration> rules : userRulesByMod.values()) {
+            for (UserRuleDeclaration rule : rules) {
+                if (rule.getType() == UserRuleDeclaration.RuleType.REPLACED) {
+                    ReplacedByMod replacedByMod = new ReplacedByMod(rule.getTargetModId(), rule.getModId(), rule.getModId());
+                    replacedByModIdToModMap.computeIfAbsent(rule.getTargetModId(), k -> new ArrayList<>()).add(replacedByMod);
+                }
+            }
+        }
     }
 
     private void resetModsDependencies(LinkedHashMap<String, Mod> allMods) {
@@ -479,6 +490,14 @@ public class ModService {
                     declaredDependency.setMod(ruleDeclaration.getModId());
                     declaredDependency.setTargetMod(ruleDeclaration.getTargetModId());
                     declaredDependency.setDependencyType(DependencyType.REQUIRED);
+                    declaredDependency.getSources().add(DeclarationSource.USER);
+                    mod.addDeclaredDependency(declaredDependency);
+                } else if (ruleDeclaration.getType() == UserRuleDeclaration.RuleType.REPLACED) {
+                    // user declared replacement of a required mod (ignore required)
+                    ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
+                    declaredDependency.setMod(ruleDeclaration.getModId());
+                    declaredDependency.setTargetMod(ruleDeclaration.getTargetModId());
+                    declaredDependency.setDependencyType(DependencyType.REPLACED);
                     declaredDependency.getSources().add(DeclarationSource.USER);
                     mod.addDeclaredDependency(declaredDependency);
                 }
@@ -783,7 +802,7 @@ public class ModService {
             for (String replacedMod : modConfig.getIgnoreRequiredMods()) {
                 ModLoadOrderDeclaration loadOrder = new ModLoadOrderDeclaration();
                 loadOrder.setMod(mod.getId());
-                loadOrder.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
+                loadOrder.setModLoadOrder(ModLoadOrder.AFTER_REQUIRED_REPLACEMENT);
                 loadOrder.setTargetMod(replacedMod);
                 loadOrder.setDeclaredInMod(anotherMod.getId());
                 loadOrder.getSources().add(DeclarationSource.HIGHLANDER);
@@ -821,6 +840,17 @@ public class ModService {
         for (UserRuleDeclaration userModRule : userModRules) {
             if (userModRule.getType() == UserRuleDeclaration.RuleType.REQUIRED) {
                 fillRequiredModDependencyAndLoadOrder(mod, userModRule.getTargetModId(), mod.getId(), DeclarationSource.USER);
+            } else if (userModRule.getType() == UserRuleDeclaration.RuleType.REPLACED) {
+                // user declared that this mod replaces a required mod -> create load order entry similar to highlander ignoreRequired
+                ModLoadOrderDeclaration loadOrder = new ModLoadOrderDeclaration();
+                loadOrder.setMod(mod.getId());
+                loadOrder.setModLoadOrder(ModLoadOrder.AFTER_REQUIRED_REPLACEMENT);
+                loadOrder.setTargetMod(userModRule.getTargetModId());
+                loadOrder.setDeclaredInMod(mod.getId());
+                loadOrder.getSources().add(DeclarationSource.USER);
+                loadOrder.setActive(mod.isActive() && isModActive(userModRule.getTargetModId()));
+                loadOrder.setHasError(false);
+                mod.addLoadOrder(loadOrder);
             } else {
                 ModLoadOrder loadOrderType = userModRule.getType().toLoadOrder();
                 if (loadOrderType != null) {
@@ -854,7 +884,7 @@ public class ModService {
 
         ModLoadOrderDeclaration loadOrder = new ModLoadOrderDeclaration();
         loadOrder.setMod(mod.getId());
-        loadOrder.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
+        loadOrder.setModLoadOrder(ModLoadOrder.AFTER_REQUIRED);
         loadOrder.setTargetMod(requiredMod);
         loadOrder.setDeclaredInMod(requiredModDeclaredInMod);
         loadOrder.getSources().add(source);
@@ -884,7 +914,7 @@ public class ModService {
             ModLoadOrderDeclaration loadOrder2 = new ModLoadOrderDeclaration();
             loadOrder2.setMod(mod.getId());
             loadOrder2.setDeclaredInMod(requiredModReplacedByMod.getDeclaredInMod());
-            loadOrder2.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED_REPLACEMENT);
+            loadOrder2.setModLoadOrder(ModLoadOrder.AFTER_REQUIRED_REPLACEMENT);
             loadOrder2.setTargetMod(requiredModReplacedByMod.getReplacedByMod());
             loadOrder2.setActive(mod.isActive() && replacedByModActive);
             loadOrder2.setHasError(modDependency2.isActive() && !isModOrReplacementModActive(requiredMod));
@@ -1013,9 +1043,10 @@ public class ModService {
                     sortItem.getBeforeValues().add(requiredModId);
                     List<ReplacedByMod> requiredModIgnoredByMods = replacedByModIdToModMap.getOrDefault(requiredModId, List.of());
                     for (ReplacedByMod requiredModIgnoredByMod : requiredModIgnoredByMods) {
-                        if (!sortItem.getBeforeValues().contains(requiredModIgnoredByMod)
-                                && !sortItem.getAfterValues().contains(requiredModIgnoredByMod)) {
-                            sortItem.getBeforeValues().add(requiredModIgnoredByMod.replacedByMod);
+                        String replacedBy = requiredModIgnoredByMod.getReplacedByMod();
+                        if (!sortItem.getBeforeValues().contains(replacedBy)
+                                && !sortItem.getAfterValues().contains(replacedBy)) {
+                            sortItem.getBeforeValues().add(replacedBy);
                         }
                     }
                 }
@@ -1229,10 +1260,6 @@ public class ModService {
             return value.strip();
         }
         return value;
-    }
-
-    private static LinkedHashMap<String, Mod> toLinkedHashMap(Stream<Mod> mods) {
-        return toLinkedHashMap(mods);
     }
 
     private static HashMap<String, Mod> toHashMap(List<Mod> mods) {
