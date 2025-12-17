@@ -78,7 +78,7 @@ public class EditModDependencyDialog extends JDialog {
                 UserRuleDeclaration rule = new UserRuleDeclaration();
                 rule.setModId(mod.getId());
                 rule.setTargetModId(mod.getId());
-                rule.setType(UserRuleDeclaration.RuleType.LOAD_AFTER);
+                rule.setType(UserRuleDeclaration.RuleType.AFTER);
                 userRules.add(0, rule);
                 panelRules.rebuildComponents();
             }

@@ -1,3 +1,4 @@
+
 package chaos.xcom.launcher.util;
 
 import lombok.Data;
@@ -8,6 +9,9 @@ import java.util.stream.Collectors;
 
 public class SortUtils {
 
+    /* =======================
+       Input DTO
+       ======================= */
     @Data
     public static class SortItem<T> {
         private T value;
@@ -15,15 +19,23 @@ public class SortUtils {
         private Set<T> afterValues = new HashSet<>();
     }
 
+    /* =======================
+       Internal one-direction model
+       value -> afterValues
+       ======================= */
+    @Data
+    private static class SortItemOneDirection<T> {
+        private T value;
+        private Set<T> afterValues = new HashSet<>();
+    }
+
+    /* =======================
+       Result DTO
+       ======================= */
     @Data
     public static class SortResult<T> {
         private final List<T> sorted;
         private final List<List<T>> cycles;
-
-        public SortResult(List<T> sorted, List<List<T>> cycles) {
-            this.sorted = sorted;
-            this.cycles = cycles;
-        }
 
         public <R> SortResult<R> map(Function<T, R> mapper) {
             return new SortResult<>(
@@ -35,6 +47,9 @@ public class SortUtils {
         }
     }
 
+    /* =======================
+       Public API
+       ======================= */
     public static <T> SortResult<T> sort(List<SortItem<T>> items) {
         LinkedHashMap<T, SortItem<T>> map = new LinkedHashMap<>();
         for (SortItem<T> item : items) {
@@ -43,39 +58,68 @@ public class SortUtils {
         return sort(map);
     }
 
-    public static <T> SortResult<T> sort(Map<T, SortItem<T>> itemMap) {
-        if (itemMap.isEmpty()) {
-            return new SortResult<>(List.of(), List.of());
+    public static <T> SortResult<T> sort(Map<T, SortItem<T>> input) {
+        Map<T, SortItemOneDirection<T>> oneDir = convert(input);
+        return sortOneDirection(oneDir);
+    }
+
+    /* =======================
+       Conversion: before/after → after-only
+       ======================= */
+    private static <T> Map<T, SortItemOneDirection<T>> convert(
+            Map<T, SortItem<T>> input
+    ) {
+        Map<T, SortItemOneDirection<T>> result = new LinkedHashMap<>();
+
+        for (T v : input.keySet()) {
+            SortItemOneDirection<T> od = new SortItemOneDirection<>();
+            od.setValue(v);
+            result.put(v, od);
         }
 
+        for (SortItem<T> item : input.values()) {
+            T v = item.getValue();
+
+            // v must be AFTER x → x -> v
+            for (T after : item.getAfterValues()) {
+                if (result.containsKey(after)) {
+                    result.get(after).getAfterValues().add(v);
+                }
+            }
+
+            // v must be BEFORE x → v -> x
+            for (T before : item.getBeforeValues()) {
+                if (result.containsKey(before)) {
+                    result.get(v).getAfterValues().add(before);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /* =======================
+       Core algorithm
+       ======================= */
+    private static <T> SortResult<T> sortOneDirection(
+            Map<T, SortItemOneDirection<T>> items
+    ) {
         Map<T, List<T>> graph = new LinkedHashMap<>();
         Map<T, Integer> indegree = new LinkedHashMap<>();
 
-        for (T v : itemMap.keySet()) {
+        for (T v : items.keySet()) {
             graph.put(v, new ArrayList<>());
             indegree.put(v, 0);
         }
 
-        // Build edges
-        for (SortItem<T> item : itemMap.values()) {
-            T val = item.getValue();
-
+        for (SortItemOneDirection<T> item : items.values()) {
             for (T after : item.getAfterValues()) {
-                if (itemMap.containsKey(after)) {
-                    graph.get(after).add(val);
-                    indegree.compute(val, (k, v) -> v + 1);
-                }
-            }
-
-            for (T before : item.getBeforeValues()) {
-                if (itemMap.containsKey(before)) {
-                    graph.get(val).add(before);
-                    indegree.compute(before, (k, v) -> v + 1);
-                }
+                graph.get(item.getValue()).add(after);
+                indegree.put(after, indegree.get(after) + 1);
             }
         }
 
-        // Kahn's algorithm
+        /* ---------- Kahn ---------- */
         Queue<T> queue = new ArrayDeque<>();
         for (var e : indegree.entrySet()) {
             if (e.getValue() == 0) {
@@ -90,99 +134,165 @@ public class SortUtils {
             sorted.add(v);
 
             for (T next : graph.get(v)) {
-                indegree.compute(next, (k, val) -> val - 1);
+                indegree.put(next, indegree.get(next) - 1);
                 if (indegree.get(next) == 0) {
                     queue.add(next);
                 }
             }
         }
 
-        // Remaining nodes (blocked by cycles)
+        /* ---------- Cycles ---------- */
         Set<T> remaining = indegree.entrySet().stream()
                 .filter(e -> e.getValue() > 0)
                 .map(Map.Entry::getKey)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
-        List<List<T>> orderedCycles = new ArrayList<>();
+        List<List<T>> cycles = new ArrayList<>();
 
-        if (!remaining.isEmpty()) {
-            List<Set<T>> sccs = findSCCs(graph, remaining);
-
-            Set<T> cycleNodes = new HashSet<>();
-
-            for (Set<T> scc : sccs) {
-                if (scc.size() > 1) {
-                    List<T> cycle = new ArrayList<>(scc);
-                    orderedCycles.add(cycle);
-                    cycleNodes.addAll(cycle);
-                }
-            }
-
-            // Classify leftover nodes
-            List<T> beforeCycles = new ArrayList<>();
-            List<T> afterCycles = new ArrayList<>();
-
-            for (T node : remaining) {
-                if (cycleNodes.contains(node)) continue;
-
-                boolean dependsOnCycle = false;
-                for (T cycleNode : cycleNodes) {
-                    if (graph.get(cycleNode).contains(node)) {
-                        dependsOnCycle = true;
-                        break;
-                    }
-                }
-
-                if (dependsOnCycle) {
-                    afterCycles.add(node);
-                } else {
-                    beforeCycles.add(node);
-                }
-            }
-
-            // Remove wrongly emitted nodes (must come AFTER cycles)
-            sorted.removeAll(afterCycles);
-
-            // Insert BEFORE-cycle nodes just before cycles
-            int cycleInsertIndex = sorted.size();
-            sorted.addAll(cycleNodes);
-
-            // Insert AFTER-cycle nodes
-            sorted.addAll(afterCycles);
+        if (remaining.isEmpty()) {
+            return new SortResult<>(sorted, cycles);
         }
 
-        return new SortResult<>(sorted, orderedCycles);
+        List<Set<T>> sccs = findSCCs(graph, remaining);
+
+        Set<T> cycleNodes = new LinkedHashSet<>();
+        for (Set<T> scc : sccs) {
+            if (scc.size() > 1) {
+                cycles.add(new ArrayList<>(scc));
+                cycleNodes.addAll(scc);
+            }
+        }
+
+        /* ---------- Placement ---------- */
+        List<T> beforeCycle = new ArrayList<>();
+        List<T> afterCycle = new ArrayList<>();
+
+        // Build reverse graph for reachability checks
+        Map<T, List<T>> reverseGraph = new LinkedHashMap<>();
+        for (T v : graph.keySet()) {
+            reverseGraph.put(v, new ArrayList<>());
+        }
+        for (Map.Entry<T, List<T>> e : graph.entrySet()) {
+            T from = e.getKey();
+            for (T to : e.getValue()) {
+                reverseGraph.get(to).add(from);
+            }
+        }
+
+        // Compute nodes reachable from cycle nodes (cycle -> ... -> node)
+        Set<T> reachableFromCycle = new LinkedHashSet<>();
+        ArrayDeque<T> q = new ArrayDeque<>();
+        for (T c : cycleNodes) {
+            q.add(c);
+        }
+        while (!q.isEmpty()) {
+            T cur = q.poll();
+            for (T neigh : graph.get(cur)) {
+                if (!reachableFromCycle.contains(neigh) && !cycleNodes.contains(neigh)) {
+                    reachableFromCycle.add(neigh);
+                    q.add(neigh);
+                }
+            }
+        }
+
+        // Compute nodes that can reach cycle nodes (node -> ... -> cycle)
+        Set<T> canReachCycle = new LinkedHashSet<>();
+        q.clear();
+        for (T c : cycleNodes) {
+            q.add(c);
+        }
+        while (!q.isEmpty()) {
+            T cur = q.poll();
+            for (T pred : reverseGraph.get(cur)) {
+                if (!canReachCycle.contains(pred) && !cycleNodes.contains(pred)) {
+                    canReachCycle.add(pred);
+                    q.add(pred);
+                }
+            }
+        }
+
+        for (T v : remaining) {
+            if (cycleNodes.contains(v)) {
+                continue;
+            }
+
+            boolean comesAfterCycle = false;
+            boolean comesBeforeCycle = false;
+
+            // transitive relationships: if reachable from cycle -> comes after
+            if (reachableFromCycle.contains(v)) {
+                comesAfterCycle = true;
+            }
+
+            // if can reach cycle -> comes before
+            if (canReachCycle.contains(v)) {
+                comesBeforeCycle = true;
+            }
+
+            // If both flags false, this node is unrelated (kept as unrelated)
+            if (comesBeforeCycle && !comesAfterCycle) {
+                beforeCycle.add(v);
+            } else if (comesAfterCycle && !comesBeforeCycle) {
+                afterCycle.add(v);
+            }
+            // else: unrelated -> will be handled below
+        }
+
+        // Collect remaining unrelated nodes (were not in Kahn result)
+        Set<T> others = new LinkedHashSet<>(remaining);
+        others.removeAll(cycleNodes);
+        others.removeAll(beforeCycle);
+        others.removeAll(afterCycle);
+        List<T> unrelated = new ArrayList<>(others);
+
+        // Ensure removed items are not duplicated
+        sorted.removeAll(beforeCycle);
+        sorted.removeAll(afterCycle);
+        sorted.removeAll(unrelated);
+
+        List<T> finalSorted = new ArrayList<>(sorted);
+        finalSorted.addAll(beforeCycle);
+        finalSorted.addAll(unrelated);   // put unrelated before cycles to keep constraints safe
+        finalSorted.addAll(cycleNodes);
+        finalSorted.addAll(afterCycle);
+
+        return new SortResult<>(finalSorted, cycles);
     }
 
-    // Tarjan SCC
-    private static <T> List<Set<T>> findSCCs(Map<T, List<T>> graph, Set<T> nodesToCheck) {
-        List<Set<T>> sccs = new ArrayList<>();
+    /* =======================
+       Tarjan SCC
+       ======================= */
+    private static <T> List<Set<T>> findSCCs(
+            Map<T, List<T>> graph,
+            Set<T> nodes
+    ) {
+        List<Set<T>> result = new ArrayList<>();
         Map<T, Integer> index = new HashMap<>();
-        Map<T, Integer> lowlink = new HashMap<>();
+        Map<T, Integer> low = new HashMap<>();
         Deque<T> stack = new ArrayDeque<>();
         Set<T> onStack = new HashSet<>();
         int[] idx = {0};
 
-        class Tarjan {
-            void strongConnect(T v) {
+        class DFS {
+            void visit(T v) {
                 index.put(v, idx[0]);
-                lowlink.put(v, idx[0]);
+                low.put(v, idx[0]);
                 idx[0]++;
                 stack.push(v);
                 onStack.add(v);
 
                 for (T w : graph.get(v)) {
-                    if (!nodesToCheck.contains(w)) continue;
+                    if (!nodes.contains(w)) continue;
 
                     if (!index.containsKey(w)) {
-                        strongConnect(w);
-                        lowlink.put(v, Math.min(lowlink.get(v), lowlink.get(w)));
+                        visit(w);
+                        low.put(v, Math.min(low.get(v), low.get(w)));
                     } else if (onStack.contains(w)) {
-                        lowlink.put(v, Math.min(lowlink.get(v), index.get(w)));
+                        low.put(v, Math.min(low.get(v), index.get(w)));
                     }
                 }
 
-                if (lowlink.get(v).equals(index.get(v))) {
+                if (low.get(v).equals(index.get(v))) {
                     Set<T> scc = new LinkedHashSet<>();
                     T w;
                     do {
@@ -190,19 +300,18 @@ public class SortUtils {
                         onStack.remove(w);
                         scc.add(w);
                     } while (!w.equals(v));
-
-                    sccs.add(scc);
+                    result.add(scc);
                 }
             }
         }
 
-        Tarjan t = new Tarjan();
-        for (T node : nodesToCheck) {
-            if (!index.containsKey(node)) {
-                t.strongConnect(node);
+        DFS dfs = new DFS();
+        for (T v : nodes) {
+            if (!index.containsKey(v)) {
+                dfs.visit(v);
             }
         }
 
-        return sccs;
+        return result;
     }
 }

@@ -22,6 +22,7 @@ public class ChaosXcomLauncherStarter implements QuarkusApplication {
         UIManager.setLookAndFeel(FlatIntelliJLaf.class.getName());
         ToolTipManager.sharedInstance().setInitialDelay(0);
         ToolTipManager.sharedInstance().setReshowDelay(0);
+        ToolTipManager.sharedInstance().setDismissDelay(600000);
 
         Quarkus.run(ChaosXcomLauncherStarter.class, args);
         log.info("Application started");

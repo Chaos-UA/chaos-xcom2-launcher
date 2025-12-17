@@ -21,14 +21,15 @@ public class UserRuleDeclaration {
 
     public static enum RuleType {
         REQUIRED,
-        LOAD_BEFORE,
-        LOAD_AFTER;
+        REPLACED,
+        BEFORE,
+        AFTER;
 
         public ModLoadOrder toLoadOrder() {
-            if (LOAD_BEFORE.equals(this)) {
-                return  ModLoadOrder.LOAD_BEFORE;
-            } else if (LOAD_AFTER.equals(this)) {
-                return  ModLoadOrder.LOAD_AFTER;
+            if (BEFORE.equals(this)) {
+                return  ModLoadOrder.BEFORE;
+            } else if (AFTER.equals(this)) {
+                return  ModLoadOrder.AFTER;
             }
             return null;
         }

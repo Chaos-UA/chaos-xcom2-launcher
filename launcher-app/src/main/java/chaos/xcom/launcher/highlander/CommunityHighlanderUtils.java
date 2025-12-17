@@ -68,13 +68,13 @@ public class CommunityHighlanderUtils {
                                 switch (key) {
                                     case "RunAfter" -> {
                                         RunOrderDeclaration runOrderDeclaration = new RunOrderDeclaration();
-                                        runOrderDeclaration.setModLoadOrder(ModLoadOrder.LOAD_AFTER);
+                                        runOrderDeclaration.setModLoadOrder(ModLoadOrder.AFTER);
                                         runOrderDeclaration.setTargetMod(value);
                                         currentMod.getRunOrderDeclarations().add(runOrderDeclaration);
                                     }
                                     case "RunBefore" -> {
                                         RunOrderDeclaration runOrderDeclaration = new RunOrderDeclaration();
-                                        runOrderDeclaration.setModLoadOrder(ModLoadOrder.LOAD_BEFORE);
+                                        runOrderDeclaration.setModLoadOrder(ModLoadOrder.BEFORE);
                                         runOrderDeclaration.setTargetMod(value);
                                         currentMod.getRunOrderDeclarations().add(runOrderDeclaration);
                                     }

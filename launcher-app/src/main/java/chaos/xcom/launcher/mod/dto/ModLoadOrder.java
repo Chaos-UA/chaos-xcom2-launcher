@@ -1,10 +1,10 @@
 package chaos.xcom.launcher.mod.dto;
 
 public enum ModLoadOrder {
-    LOAD_BEFORE,
+    BEFORE,
     LOAD_AFTER_REQUIRED,
     LOAD_AFTER_REQUIRED_REPLACEMENT,
-    LOAD_AFTER;
+    AFTER;
 
     /**
      * this one has less priority than LOAD_BEFORE/LOAD_AFTER
@@ -14,10 +14,10 @@ public enum ModLoadOrder {
     }
 
     public boolean isLoadBefore() {
-        return this == LOAD_BEFORE;
+        return this == BEFORE;
     }
 
     public boolean isLoadAfter() {
-        return this == LOAD_AFTER || isLoadAfterRequired();
+        return this == AFTER || isLoadAfterRequired();
     }
 }

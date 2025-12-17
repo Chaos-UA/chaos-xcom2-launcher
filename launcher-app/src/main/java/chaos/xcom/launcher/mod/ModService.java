@@ -1067,9 +1067,25 @@ public class ModService {
             for (List<String> cycleModsGroup : sortResult.getCycles()) {
                 log.warn("Found mods cycle group: {}", cycleModsGroup);
                 if (setCycleModsToMods) {
-                    List<Mod> cycleMods = cycleModsGroup.stream().map(mods::get).filter(Objects::nonNull).toList();
-                    for (Mod cycleMod : cycleMods) {
-                        cycleMod.getCycleMods().add(cycleMods);
+                    Mod.CycleGroup cycleGroup = new Mod.CycleGroup();
+                    for (String cycleMod : cycleModsGroup) {
+                        SortItem<String> modSortItemInput = sortItemMap.get(cycleMod);
+                        SortItem<String> modSortItemRelevantToCycle = new SortItem<>();
+                        modSortItemRelevantToCycle.setValue(cycleMod);
+                        for (String beforeMod : modSortItemInput.getBeforeValues()) {
+                            if (cycleModsGroup.contains(beforeMod)) {
+                                modSortItemRelevantToCycle.getBeforeValues().add(beforeMod);
+                            }
+                        }
+                        for (String afterMod : modSortItemInput.getAfterValues()) {
+                            if (cycleModsGroup.contains(afterMod)) {
+                                modSortItemRelevantToCycle.getAfterValues().add(afterMod);
+                            }
+                        }
+                        cycleGroup.getMods().add(modSortItemRelevantToCycle);
+
+                        Mod mod = mods.get(cycleMod);
+                        mod.getCycleMods().add(cycleGroup);
                     }
                 }
             }

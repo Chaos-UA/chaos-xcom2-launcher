@@ -73,7 +73,7 @@ class SortUtilsTest {
         SortResult<String> result = SortUtils.sort(items);
 
         // Sorted list should still contain all elements
-        assertEquals(result.getSorted(), List.of("A", "B", "C"));
+        assertEquals(Set.of("A", "B", "C"), new HashSet<>(result.getSorted()));
 
         // One cycle detected
         assertEquals(1, result.getCycles().size());
@@ -283,28 +283,70 @@ class SortUtilsTest {
         assertTrue(sorted.indexOf("5") > maxCycleIndex);
     }
 
+    @Test
+    void testLargeCycleDoesNotDropNodes() {
+        Map<String, SortUtils.SortItem<String>> map = new LinkedHashMap<>();
 
-//    @Test
-//    public void testSortWithMultipleCycles() {
-//        List<SortItem<String>> items = new ArrayList<>();
-//        SortItem<String> itemA = new SortItem<>();
-//        itemA.setValue("A");
-//        itemA.getAfterValues().add("B");
-//        items.add(itemA);
-//        SortItem<String> itemB = new SortItem<>();
-//        itemB.setValue("B");
-//        itemB.getAfterValues().add("C");
-//        items.add(itemB);
-//        SortItem<String> itemC = new SortItem<>();
-//        itemC.setValue("C");
-//        itemC.getAfterValues().add("D");
-//        items.add(itemC);
-//        SortItem<String> itemD = new SortItem<>();
-//        itemD.setValue("D");
-//        itemD.getAfterValues().add("A");
-//        items.add(itemD);
-//        SortResult<String> result = SortUtils.sort(items);
-//        assertTrue(result.getSorted().isEmpty()); // or assert some kind of error message indicating multiple cycles
-//    }
+        map.put("WOTCMoreSparkWeapons", item("WOTCMoreSparkWeapons",
+                Set.of(),
+                Set.of("zzzWeaponSkinReplacer", "X2WOTCCommunityHighlander",
+                        "WOTCIridarTemplateMaster", "WepUpgradeFix")));
+
+        map.put("MECTroopersLWOTC", item("MECTroopersLWOTC",
+                Set.of(),
+                Set.of("WOTCStormriderClass", "ABBPerkPack",
+                        "WOTCMoreSparkWeapons", "ModJamLWOTC_M2")));
+
+        map.put("BuildableUnits", item("BuildableUnits",
+                Set.of("WOTCRocketLaunchers"),
+                Set.of("ABBPerkPack", "MECTroopersLWOTC")));
+
+        map.put("FullerOverrideBUAddOn", item("FullerOverrideBUAddOn",
+                Set.of(),
+                Set.of("BuildableUnits", "zzzWeaponSkinReplacer")));
+
+        map.put("ModJamLWOTC_M2", item("ModJamLWOTC_M2",
+                Set.of(),
+                Set.of("WOTCMoreSparkWeapons", "X2WOTCCommunityHighlander")));
+
+        map.put("zzzWeaponSkinReplacer", item("zzzWeaponSkinReplacer",
+                Set.of(),
+                Set.of("ModJamLWOTC_M2")));
+
+        SortUtils.SortResult<String> result = SortUtils.sort(map);
+
+        // 1️⃣ Nothing lost
+        assertEquals(map.size(), result.getSorted().size());
+        assertTrue(result.getSorted().containsAll(map.keySet()));
+
+        // 2️⃣ One cycle
+        assertEquals(1, result.getCycles().size());
+        assertTrue(result.getCycles().get(0)
+                .containsAll(Set.of(
+                        "WOTCMoreSparkWeapons",
+                        "zzzWeaponSkinReplacer",
+                        "ModJamLWOTC_M2"
+                )));
+
+        // 3️⃣ Ordering: FullerOverrideBUAddOn AFTER zzzWeaponSkinReplacer
+        assertTrue(
+                result.getSorted().indexOf("zzzWeaponSkinReplacer")
+                        < result.getSorted().indexOf("FullerOverrideBUAddOn")
+        );
+
+        // 4 Ordering: BuildableUnits After MECTroopersLWOTC
+        assertTrue(
+                result.getSorted().indexOf("MECTroopersLWOTC")
+                        < result.getSorted().indexOf("BuildableUnits")
+        );
+    }
+
+    private SortUtils.SortItem<String> item(String value, Set<String> before, Set<String> after) {
+        SortUtils.SortItem<String> i = new SortUtils.SortItem<>();
+        i.setValue(value);
+        i.getBeforeValues().addAll(before);
+        i.getAfterValues().addAll(after);
+        return i;
+    }
 
 }

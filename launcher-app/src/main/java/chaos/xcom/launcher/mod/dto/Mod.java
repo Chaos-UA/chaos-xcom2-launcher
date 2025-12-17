@@ -4,6 +4,8 @@ import chaos.xcom.launcher.highlander.dto.HighlanderModsConfig;
 import chaos.xcom.launcher.highlander.dto.HighlanderRunPriorityGroup;
 import chaos.xcom.launcher.mod.rule.UserRuleDeclaration;
 import chaos.xcom.launcher.steam.SteamMod;
+import chaos.xcom.launcher.util.SortUtils;
+import chaos.xcom.launcher.util.SortUtils.SortItem;
 import com.sun.source.tree.Tree;
 import lombok.AccessLevel;
 import lombok.Data;
@@ -60,7 +62,7 @@ public class Mod {
      */
     private List<ModLoadOrderDeclaration> declaredLoadOrders = new ArrayList<>();
 
-    private List<List<Mod>> cycleMods = new ArrayList<>();
+    private List<CycleGroup> cycleMods = new ArrayList<>();
     private List<ModDependency> dependencies = new ArrayList<>();
     private List<ModHighlanderGroupLoadOrder> highlanderGroupLoadOrders = new ArrayList<>();
     private List<ModLoadOrderGroupDeclaration> loadOrderGroups = new ArrayList<>();
@@ -224,6 +226,11 @@ public class Mod {
             this.setHasError(false);
             this.setActive(false);
         }
+    }
+
+    @Data
+    public static class CycleGroup {
+        private List<SortItem<String>> mods = new ArrayList<>();
     }
 
 }
