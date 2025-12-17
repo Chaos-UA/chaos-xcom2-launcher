@@ -5,22 +5,27 @@ import chaos.xcom.launcher.gui.component.XTable;
 import chaos.xcom.launcher.gui.component.event.XMouseAdapter;
 import chaos.xcom.launcher.gui.component.event.XTableModel;
 import chaos.xcom.launcher.mod.ModService;
+import chaos.xcom.launcher.mod.dto.DeclarationSource;
 import chaos.xcom.launcher.mod.dto.DependencyType;
 import chaos.xcom.launcher.mod.dto.Mod;
 import chaos.xcom.launcher.mod.dto.ModDeclaredDependency;
 import chaos.xcom.launcher.steam.SteamMod.SteamRequiredMod;
 import chaos.xcom.launcher.steam.SteamService;
 import chaos.xcom.launcher.util.ColorConstant;
+import lombok.extern.slf4j.Slf4j;
 import org.jdesktop.swingx.decorator.AbstractHighlighter;
 import org.jdesktop.swingx.decorator.ComponentAdapter;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseEvent;
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+@Slf4j
 public class ModDeclaredDependenciesTable extends XTable {
     private static final int TARGET_MOD_ID_COLUMN_INDEX = 2;
     private ModDependenciesTableModel model;
@@ -52,11 +57,24 @@ public class ModDeclaredDependenciesTable extends XTable {
                 int selectedRow = rowAtPoint(e.getPoint());
                 if (selectedRow >= 0) {
                     ModDeclaredDependency row = model.getRows().get(selectedRow);
-                    if (row.getSteamRequiredMod().getSteamModId() != null) {
-                        JMenuItem browseSteamMod = new JMenuItem("Browse Steam mod - " + row.getSteamRequiredMod().getSteamModName());
-                        browseSteamMod.addActionListener(ae -> {
-                            SteamService.openSteamModInBrowser(row.getSteamRequiredMod().getSteamModId());
-                        });
+                    if (row.getSources().contains(DeclarationSource.HIGHLANDER)) {
+                        File xcomGameIniFile = new File(mod.getDirectory() + "/Config/XComGame.ini");
+                        if (xcomGameIniFile.isFile()) {
+                            JMenuItem openXcomGameIniFile = new JMenuItem("Open Config/XComGame.ini of " + mod.getId());
+                            openXcomGameIniFile.addActionListener(ae -> {
+                                try {
+                                    Desktop.getDesktop().open(xcomGameIniFile);
+                                } catch (IOException ex) {
+                                    log.error("Failed to open file: " + xcomGameIniFile, ex);
+                                }
+                            });
+                            menu.add(openXcomGameIniFile);
+                        }
+                    }
+                    SteamRequiredMod steamRequiredMod = row.getSteamRequiredMod();
+                    if (steamRequiredMod != null && steamRequiredMod.getSteamModId() != null) {
+                        JMenuItem browseSteamMod = new JMenuItem("Browse Steam mod - " + steamRequiredMod.getSteamModName());
+                        browseSteamMod.addActionListener(ae -> SteamService.openSteamModInBrowser(steamRequiredMod.getSteamModId()));
                         menu.addSeparator();
                         menu.add(browseSteamMod);
                     }
@@ -70,7 +88,7 @@ public class ModDeclaredDependenciesTable extends XTable {
             @Override
             protected Component doHighlight(Component component, ComponentAdapter adapter) {
                 ModDeclaredDependency row = model.getRows().get(convertRowIndexToModel(adapter.row));
-                if (row == null || row == null) {
+                if (row == null) {
                     return component;
                 }
                 if (row.isHasError()) {
@@ -107,7 +125,10 @@ public class ModDeclaredDependenciesTable extends XTable {
                             String targetMod = declaredDependency.getTargetMod();
                             if (targetMod == null) {
                                 SteamRequiredMod steamRequiredMod = declaredDependency.getSteamRequiredMod();
-                                return steamRequiredMod.getSteamModName() + " - [" + steamRequiredMod.getSteamModId() + "]";
+                                if (steamRequiredMod != null && steamRequiredMod.getSteamModId() != null) {
+                                    return steamRequiredMod.getSteamModName() + " - [" + steamRequiredMod.getSteamModId() + "]";
+                                }
+                                return "";
                             }
                             return targetMod;
                         }

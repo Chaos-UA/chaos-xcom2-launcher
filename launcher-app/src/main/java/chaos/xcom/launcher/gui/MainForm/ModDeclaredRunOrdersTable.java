@@ -9,16 +9,22 @@ import chaos.xcom.launcher.highlander.dto.HighlanderModConfig.RunOrderDeclaratio
 import chaos.xcom.launcher.mod.ModService;
 import chaos.xcom.launcher.mod.dto.DeclarationSource;
 import chaos.xcom.launcher.mod.dto.Mod;
+import chaos.xcom.launcher.mod.dto.ModDeclaredDependency;
 import chaos.xcom.launcher.mod.dto.ModLoadOrder;
 import chaos.xcom.launcher.mod.rule.UserRuleDeclaration;
 import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 
 import javax.swing.*;
+import java.awt.*;
 import java.awt.event.MouseEvent;
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 
+@Slf4j
 public class ModDeclaredRunOrdersTable extends XTable {
     private ModDeclaredRunOrdersModel model;
     private Mod mod;
@@ -46,6 +52,26 @@ public class ModDeclaredRunOrdersTable extends XTable {
                     ModService.get().openUserModRulesEditorDialog(mod);
                 });
                 menu.add(editUserModRules);
+
+                int selectedRow = rowAtPoint(e.getPoint());
+                if (selectedRow >= 0) {
+                    ModRunOrderTableRow row = model.getRows().get(selectedRow);
+                    if (row.getSource() == DeclarationSource.HIGHLANDER) {
+                        File xcomGameIniFile = new File(mod.getDirectory() + "/Config/XComGame.ini");
+                        if (xcomGameIniFile.isFile()) {
+                            JMenuItem openXcomGameIniFile = new JMenuItem("Open Config/XComGame.ini of " + mod.getId());
+                            openXcomGameIniFile.addActionListener(ae -> {
+                                try {
+                                    Desktop.getDesktop().open(xcomGameIniFile);
+                                } catch (IOException ex) {
+                                    log.error("Failed to open file: " + xcomGameIniFile, ex);
+                                }
+                            });
+                            menu.add(openXcomGameIniFile);
+                        }
+                    }
+                }
+
                 menu.show(e.getComponent(), e.getX(), e.getY());
             }
         });
