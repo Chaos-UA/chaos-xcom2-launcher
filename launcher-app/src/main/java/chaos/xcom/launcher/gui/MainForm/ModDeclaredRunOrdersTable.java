@@ -55,6 +55,7 @@ public class ModDeclaredRunOrdersTable extends XTable {
 
                 int selectedRow = rowAtPoint(e.getPoint());
                 if (selectedRow >= 0) {
+                    setRowSelectionInterval(selectedRow, selectedRow);
                     ModRunOrderTableRow row = model.getRows().get(selectedRow);
                     if (row.getSource() == DeclarationSource.HIGHLANDER) {
                         File xcomGameIniFile = new File(mod.getDirectory() + "/Config/XComGame.ini");

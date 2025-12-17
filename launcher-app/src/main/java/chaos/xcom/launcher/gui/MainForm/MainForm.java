@@ -21,18 +21,29 @@ import org.apache.commons.lang3.StringUtils;
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
 import javax.swing.event.*;
+import javax.swing.text.LabelView;
+import javax.swing.text.StyledEditorKit;
+import javax.swing.text.View;
+import javax.swing.text.ViewFactory;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.File;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 @Slf4j
 @RequiredArgsConstructor
 public class MainForm extends JFrame {
+
+    private static final int TAB_XCOM_GAME_INI_INDEX = 2;
 
     private ModTable tblModsList;
     private JPanel pnlRoot;
@@ -53,6 +64,9 @@ public class MainForm extends JFrame {
     private JButton btnSyncModSteamInfo;
     private JPanel pnlModInfo;
     private JLabel lblErrorsDetected;
+    private FlatEditorPane epXcomGameIni;
+    private FlatTabbedPane tpModInfo;
+    private XScrollPane spXcomGameIni;
     private final MainFormMenuBar mainFormMenuBar;
     private final SwingService swingService;
     @Getter
@@ -131,6 +145,14 @@ public class MainForm extends JFrame {
 
         setSelectedMod(null);
 
+
+        // Load INI content lazily when ini tab is selected
+        tpModInfo.addChangeListener(e -> {
+            if (tpModInfo.getSelectedIndex() == TAB_XCOM_GAME_INI_INDEX) {
+                loadIniForSelectedMod();
+            }
+        });
+
         swingService.applyFullWindowState("MainForm", this);
         setVisible(true);
     }
@@ -186,17 +208,60 @@ public class MainForm extends JFrame {
             pnlModImage.setImage(ImageUtils.WOTC_ICON.getImage());
             epXcomMod.setText(null);
             epSteamDescription.setText(null);
+
+            boolean wasSelected = tpModInfo.getSelectedIndex() == TAB_XCOM_GAME_INI_INDEX;
+            tpModInfo.setEnabledAt(TAB_XCOM_GAME_INI_INDEX, false);
+            if (wasSelected) {
+                tpModInfo.setSelectedIndex(0);
+            }
         } else {
             pnlModImage.setImage(mod.getModPreviewImgFile());
             epXcomMod.setText(mod.getXcomModFileContent());
             epSteamDescription.setText("<html>" + StringUtils.stripToEmpty(mod.getSteamMod().getDescription()) + "</html>");
+
+            Path iniPath = Path.of(mod.getDirectory().getAbsolutePath(), "Config", "XComGame.ini");
+            boolean exists = Files.exists(iniPath);
+            if (exists) {
+                tpModInfo.setEnabledAt(TAB_XCOM_GAME_INI_INDEX, true);
+                if (tpModInfo.getSelectedIndex() == TAB_XCOM_GAME_INI_INDEX) {
+                    loadIniForSelectedMod();
+                }
+            } else {
+                tpModInfo.setEnabledAt(TAB_XCOM_GAME_INI_INDEX, false);
+                boolean wasSelected = tpModInfo.getSelectedIndex() == TAB_XCOM_GAME_INI_INDEX;
+                if (wasSelected) {
+                    tpModInfo.setSelectedIndex(0);
+                }
+            }
         }
+
         SwingUtilities.invokeLater(() -> {
             spXcomModDesc.getVerticalScrollBar().setValue(0);
             spXcomModDesc.getHorizontalScrollBar().setValue(0);
             spSteamDescription.getVerticalScrollBar().setValue(0);
             spSteamDescription.getHorizontalScrollBar().setValue(0);
+            spXcomGameIni.getVerticalScrollBar().setValue(0);
+            spXcomGameIni.getHorizontalScrollBar().setValue(0);
         });
+    }
+
+    private void loadIniForSelectedMod() {
+        Mod mod = selectedMod;
+        if (mod == null) {
+            epXcomGameIni.setText("");
+            return;
+        }
+        Path iniPath = new File(mod.getDirectory() + "/Config/XComGame.ini").toPath();
+        if (!Files.exists(iniPath)) {
+            epXcomGameIni.setText("");
+            return;
+        }
+        try {
+            String content = Files.readString(iniPath, StandardCharsets.UTF_8);
+            epXcomGameIni.setText(content);
+        } catch (Exception e) {
+            epXcomGameIni.setText("Failed to read XComGame.ini: " + e.getMessage());
+        }
     }
 
     public void onSteamSyncProgress(SteamSyncProgress steamSyncProgress) {
@@ -254,12 +319,12 @@ public class MainForm extends JFrame {
         final JPanel panel2 = new JPanel();
         panel2.setLayout(new GridLayoutManager(1, 1, new Insets(0, 0, 0, 0), -1, -1));
         flatSplitPane1.setRightComponent(panel2);
-        final FlatTabbedPane flatTabbedPane1 = new FlatTabbedPane();
-        panel2.add(flatTabbedPane1, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
-        flatTabbedPane1.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), null, TitledBorder.DEFAULT_JUSTIFICATION, TitledBorder.DEFAULT_POSITION, null, null));
+        tpModInfo = new FlatTabbedPane();
+        panel2.add(tpModInfo, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
+        tpModInfo.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), null, TitledBorder.DEFAULT_JUSTIFICATION, TitledBorder.DEFAULT_POSITION, null, null));
         final JPanel panel3 = new JPanel();
         panel3.setLayout(new GridLayoutManager(2, 1, new Insets(0, 0, 0, 0), -1, -1));
-        flatTabbedPane1.addTab("Steam description", panel3);
+        tpModInfo.addTab("Steam description", panel3);
         spSteamDescription = new FlatScrollPane();
         spSteamDescription.setHorizontalScrollBarPolicy(30);
         spSteamDescription.setShowButtons(false);
@@ -275,12 +340,17 @@ public class MainForm extends JFrame {
         panel3.add(btnSyncModSteamInfo, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         spXcomModDesc = new JScrollPane();
         spXcomModDesc.setHorizontalScrollBarPolicy(30);
-        flatTabbedPane1.addTab("XComMod", spXcomModDesc);
+        tpModInfo.addTab("XComMod", spXcomModDesc);
         epXcomMod = new FlatEditorPane();
         epXcomMod.setEditable(false);
         epXcomMod.setMinimumSize(new Dimension(100, 23));
         epXcomMod.setText("Label");
         spXcomModDesc.setViewportView(epXcomMod);
+        spXcomGameIni = new XScrollPane();
+        tpModInfo.addTab("XComGame.ini", spXcomGameIni);
+        epXcomGameIni = new FlatEditorPane();
+        epXcomGameIni.setEditable(false);
+        spXcomGameIni.setViewportView(epXcomGameIni);
         final JPanel panel4 = new JPanel();
         panel4.setLayout(new GridLayoutManager(1, 1, new Insets(0, 0, 0, 0), -1, -1));
         splitPane1.setRightComponent(panel4);

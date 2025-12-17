@@ -56,6 +56,7 @@ public class ModDeclaredDependenciesTable extends XTable {
 
                 int selectedRow = rowAtPoint(e.getPoint());
                 if (selectedRow >= 0) {
+                    setRowSelectionInterval(selectedRow, selectedRow);
                     ModDeclaredDependency row = model.getRows().get(selectedRow);
                     if (row.getSources().contains(DeclarationSource.HIGHLANDER)) {
                         File xcomGameIniFile = new File(mod.getDirectory() + "/Config/XComGame.ini");
