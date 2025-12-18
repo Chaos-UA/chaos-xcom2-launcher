@@ -95,15 +95,16 @@ public class Mod {
         if (dependency.getSteamRequiredMod() != null) {
             steamModId = dependency.getSteamRequiredMod().getSteamModId();
         }
-        return toIgnoredDependencyKey(dependency.getDependencyType(), dependency.getTargetMod(), steamModId);
+        return toIgnoredDependencyKey(dependency.getMod(), dependency.getDependencyType(), dependency.getTargetMod(), steamModId);
     }
 
-    public String toIgnoredDependencyKey(DependencyType dependencyType, String targetMod, String steamModId) {
+    public String toIgnoredDependencyKey(String mod, DependencyType dependencyType, String targetMod, String steamModId) {
         String nonDownloadedSteamModId = null;
         if (targetMod == null) {
             nonDownloadedSteamModId = steamModId;
         }
-        return String.format("%s|%s|%s",
+        return String.format("%s|%s|%s|%s",
+                mod,
                 dependencyType,
                 targetMod,
                 nonDownloadedSteamModId);

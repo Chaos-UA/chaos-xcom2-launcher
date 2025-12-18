@@ -39,8 +39,8 @@ public class ModTableModel extends XTableModel<Mod> {
                         return Objects.equals(order, Mod.MOD_ORDER_DISABLED) ? "" : String.valueOf(order);
                     }
                 }),
-                new TableColumn<>("Title", String.class, Mod::getTitle),
                 new TableColumn<>("ID", String.class, Mod::getId),
+                new TableColumn<>("Title", String.class, Mod::getTitle),
                 new TableColumn<>("Status", String.class, Mod::getStatusAsString),
                 new TableColumn<>("Dependencies", Integer.class, new Function<Mod, Integer>() {
                     @Override
