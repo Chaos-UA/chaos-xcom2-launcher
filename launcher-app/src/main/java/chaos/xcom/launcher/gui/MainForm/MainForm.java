@@ -172,12 +172,28 @@ public class MainForm extends JFrame {
         lblErrorsDetected.setVisible(errorsCount > 0);
         lblErrorsDetected.setText("Errors: " + errorsCount);
         lblErrorsDetected.setForeground(Color.RED);
+        updateModsCount();
     }
 
     public void onMainTableDataChange() {
         Mod currentSelectedMod = selectedMod;
         tblModsList.getModel().fireTableDataChanged();
         selectModIfExist(currentSelectedMod);
+    }
+
+    private void updateModsCount() {
+        int active = 0;
+        int inactive = 0;
+        int total = 0;
+        for (Mod m : mods) {
+            if (m.isActive()) {
+                active++;
+            } else {
+                inactive++;
+            }
+            total++;
+        }
+        lblModsCount.setText(active + "/" + total);
     }
 
     public void selectModIfExist(Mod mod) {
@@ -416,7 +432,7 @@ public class MainForm extends JFrame {
         pbSteamProgress.setValue(0);
         panel9.add(pbSteamProgress, new GridConstraints(0, 2, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_WANT_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         final JPanel panel10 = new JPanel();
-        panel10.setLayout(new GridLayoutManager(1, 2, new Insets(0, 0, 0, 0), -1, -1));
+        panel10.setLayout(new GridLayoutManager(1, 3, new Insets(0, 0, 0, 0), -1, -1));
         panel9.add(panel10, new GridConstraints(0, 1, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
         lblErrorsDetected = new JLabel();
         lblErrorsDetected.setHorizontalAlignment(2);
@@ -424,9 +440,13 @@ public class MainForm extends JFrame {
         lblErrorsDetected.setText("");
         lblErrorsDetected.setToolTipText("Some active mods have errors");
         lblErrorsDetected.setVisible(false);
-        panel10.add(lblErrorsDetected, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        panel10.add(lblErrorsDetected, new GridConstraints(0, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         final Spacer spacer1 = new Spacer();
-        panel10.add(spacer1, new GridConstraints(0, 1, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_WANT_GROW, 1, null, null, null, 0, false));
+        panel10.add(spacer1, new GridConstraints(0, 2, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_WANT_GROW, 1, null, null, null, 0, false));
+        lblModsCount = new JLabel();
+        lblModsCount.setText("0/0");
+        lblModsCount.setToolTipText("Total mods count");
+        panel10.add(lblModsCount, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
     }
 
     /**

@@ -409,6 +409,7 @@
                 </constraints>
                 <properties>
                   <text value="0/0"/>
+                  <toolTipText value="Total mods count"/>
                 </properties>
               </component>
             </children>
