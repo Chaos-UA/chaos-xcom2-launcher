@@ -187,19 +187,6 @@ public class ModDependenciesTable extends XTable {
                 getModService().setModActive(row.getMod(), !getModService().isModActive(row.getMod()));
             } else if (column == TARGET_MOD_ID_COLUMN_INDEX) {
                 getModService().setModActive(row.getTargetMod(), !getModService().isModActive(row.getTargetMod()));
-            } else if (column == IGNORED_COLUMN_INDEX) {
-                boolean ignored = (Boolean) aValue;
-                // delegate to ModService: find declaring mod and matching declared dependency
-                Mod declaring = getModService().findModById(row.getDeclaredInMod()).orElse(null);
-                if (declaring != null) {
-                    for (ModDeclaredDependency dd : declaring.getDeclaredDependencies()) {
-                        if (dd.getDependencyType() == DependencyType.REQUIRED && dd.getTargetMod() != null
-                                && dd.getTargetMod().equals(row.getTargetMod())) {
-                            getModService().setIgnoreDependency(declaring, dd, ignored);
-                            break;
-                        }
-                    }
-                }
             } else {
                 super.setValueAt(aValue, rowIndex, column);
             }

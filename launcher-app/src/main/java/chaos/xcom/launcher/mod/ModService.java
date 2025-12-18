@@ -843,14 +843,19 @@ public class ModService {
             }
 
             for (String incompatibleMod : modConfig.getIncompatibleMods()) {
+                String ignoredByMod = findModIgnoringDeclaredDependency(incompatibleMod, DependencyType.INCOMPATIBLE);
+                boolean ignored = ignoredByMod != null;
                 ModDependency modDependency = new ModDependency();
                 modDependency.setMod(mod.getId());
                 modDependency.setDeclaredInMod(anotherMod.getId());
                 modDependency.setDependencyType(DependencyType.INCOMPATIBLE);
                 modDependency.setTargetMod(incompatibleMod);
                 modDependency.getSources().add(DeclarationSource.HIGHLANDER);
-                modDependency.setActive(mod.isActive() && isModActive(incompatibleMod));
-                modDependency.setHasError(modDependency.isActive() && isModActive(incompatibleMod));
+                modDependency.setIgnored(ignored);
+                modDependency.setActive(mod.isActive() && isModActive(incompatibleMod) && !ignored);
+                modDependency.setHasError(modDependency.isActive() && isModActive(incompatibleMod) && !ignored);
+                modDependency.setOverriddenByMod(ignoredByMod);
+
                 mod.addDependency(modDependency);
             }
 
@@ -895,14 +900,19 @@ public class ModService {
                 loadOrder.setHasError(false);
                 mod.addLoadOrder(loadOrder);
             } else if (userModRule.getType() == UserRuleDeclaration.RuleType.INCOMPATIBLE) {
+                String ignoredByMod = findModIgnoringDeclaredDependency(userModRule.getTargetModId(), DependencyType.INCOMPATIBLE);
                 ModDependency modDependency = new ModDependency();
                 modDependency.setMod(mod.getId());
                 modDependency.setDeclaredInMod(mod.getId());
                 modDependency.setDependencyType(DependencyType.INCOMPATIBLE);
                 modDependency.setTargetMod(userModRule.getTargetModId());
                 modDependency.getSources().add(DeclarationSource.USER);
-                modDependency.setActive(mod.isActive() && isModActive(userModRule.getTargetModId()));
-                modDependency.setHasError(modDependency.isActive() && isModActive(userModRule.getTargetModId()));
+                modDependency.setIgnored(ignoredByMod != null);
+                modDependency.setActive(mod.isActive() && isModActive(userModRule.getTargetModId()) && ignoredByMod == null);
+                modDependency.setHasError(modDependency.isActive() && isModActive(userModRule.getTargetModId()) && ignoredByMod == null);
+                if (ignoredByMod != null) {
+                    modDependency.setOverriddenByMod(ignoredByMod);
+                }
                 mod.addDependency(modDependency);
             } else {
                 ModLoadOrder loadOrderType = userModRule.getType().toLoadOrder();
@@ -1303,6 +1313,23 @@ public class ModService {
             for (ModDeclaredDependency dd : mod.getDeclaredDependencies()) {
                 if (Objects.equals(dd.getTargetMod(), requiredMod)
                         && dd.getDependencyType() == DependencyType.REQUIRED
+                        && dd.isIgnored()) {
+                    return mod.getId();
+                }
+            }
+        }
+        return null;
+    }
+
+    private String findModIgnoringDeclaredDependency(String targetModId, DependencyType dependencyType) {
+        if (targetModId == null) {
+            return null;
+        }
+        // search all mods for a INCOMPATIBLE declaration of targetModId that is marked ignored
+        for (Mod mod : allMods.values()) {
+            for (ModDeclaredDependency dd : mod.getDeclaredDependencies()) {
+                if (Objects.equals(dd.getTargetMod(), targetModId)
+                        && dd.getDependencyType() == dependencyType
                         && dd.isIgnored()) {
                     return mod.getId();
                 }
