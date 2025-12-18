@@ -4,8 +4,8 @@ import chaos.db.gen.tables.records.SteamModRecord;
 import chaos.xcom.launcher.common.JsonConverter;
 import chaos.xcom.launcher.event.EventPublisher;
 import chaos.xcom.launcher.exception.InternalException;
-import chaos.xcom.launcher.mod.dto.Mod;
 import chaos.xcom.launcher.steam.SteamMod.SteamRequiredMod;
+import chaos.xcom.launcher.swing.SwingService;
 import chaos.xcom.launcher.util.OsUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.annotation.PostConstruct;
@@ -19,6 +19,7 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
+import javax.swing.*;
 import java.awt.*;
 import java.io.File;
 import java.net.URI;
@@ -46,6 +47,7 @@ public class SteamService {
     // Tracks uniqueness
     private final Set<String> pendingStreamIds = ConcurrentHashMap.newKeySet();
 
+    private final AtomicInteger errorsCount = new AtomicInteger(0);
     private final AtomicInteger totalProcessedItems = new AtomicInteger(0);
 
     // Queue for processing
@@ -64,14 +66,28 @@ public class SteamService {
                     publishSteamSyncProgress();
                     steamModId = queueSteamIds.take(); // blocks until an item is available
                     publishSteamSyncProgress();
-                    processSteamMod(steamModId);
+                    if (!processSteamMod(steamModId)) {
+                        errorsCount.incrementAndGet();
+                    }
                 } catch (Exception e) {
+                    errorsCount.incrementAndGet();
                     log.error("Error processing steam mod {}", steamModId, e);
                 } finally {
                     if (steamModId != null) {
                         pendingStreamIds.remove(steamModId);
                     }
                     if (queueSteamIds.isEmpty()) {
+                        if (errorsCount.intValue() > 0) {
+                            int finalErrorsCount = errorsCount.intValue();
+                            SwingUtilities.invokeLater(() -> {
+                                JOptionPane.showMessageDialog(SwingService.getLastActiveWindowBounds(),
+                                        "Failed to sync " + finalErrorsCount + " mods.\n"
+                                                + "Please try again later.",
+                                        "Steam sync error",
+                                        JOptionPane.ERROR_MESSAGE);
+                            });
+                        }
+                        errorsCount.set(0);
                         totalProcessedItems.set(0);
                     } else {
                         totalProcessedItems.incrementAndGet();
@@ -142,10 +158,15 @@ public class SteamService {
         }
     }
 
-    private void processSteamMod(String steamModId) {
+    /**
+     * Process a single steam mod
+     * @return true if processed successfully, false otherwise.
+     */
+    private boolean processSteamMod(String steamModId) {
         SteamMod steamMod = parseSteamMod(steamModId).orElse(null);
         if (steamMod == null) {
             log.error("Failed to parse steam mod {}", steamModId);
+            return false;
         } else {
             SteamModRecord dbSteamMod = new SteamModRecord();
             dbSteamMod.setId(steamMod.getSteamModId());
@@ -164,6 +185,7 @@ public class SteamService {
             }).toList());
 
             eventPublisher.publishAsync(steamMod);
+            return true;
         }
     }
 

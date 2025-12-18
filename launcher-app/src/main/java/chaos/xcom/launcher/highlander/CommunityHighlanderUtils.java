@@ -1,5 +1,6 @@
 package chaos.xcom.launcher.highlander;
 
+import chaos.xcom.launcher.db.property.DbProperties;
 import chaos.xcom.launcher.highlander.dto.HighlanderModConfig;
 import chaos.xcom.launcher.highlander.dto.HighlanderModConfig.RunOrderDeclaration;
 import chaos.xcom.launcher.highlander.dto.HighlanderModsConfig;
@@ -8,13 +9,16 @@ import chaos.xcom.launcher.mod.dto.ModLoadOrder;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Slf4j
 public class CommunityHighlanderUtils {
     public static final String COMMUNITY_HIGHLANDER_MOD_ID = "X2WOTCCommunityHighlander";
+    public static final String COMMUNITY_HIGHLANDER_DLC2_MOD_ID = "DLC2CommunityHighlander";
     private static final Pattern SECTION_PATTERN = Pattern.compile("\\[(\\S+)(?:\\s+(\\S+))?\\]");
     private static final Pattern ENTRY_PATTERN = Pattern.compile("(\\+?)(\\S+)=(.*)");
 
@@ -106,6 +110,11 @@ public class CommunityHighlanderUtils {
         if (modsConfig.getDependenciesCount() > 0 || modsConfig.getRunOrderDependenciesCount() > 0) {
             modsConfig.getModConfigs().computeIfAbsent(mod, v -> new HighlanderModConfig(mod))
                     .getRequiredMods().add(COMMUNITY_HIGHLANDER_MOD_ID);
+        }
+
+        if (mod.equals(COMMUNITY_HIGHLANDER_MOD_ID) && DbProperties.get().isDLC2AlienHuntersInstalled()) {
+            modsConfig.getModConfigs().computeIfAbsent(mod, v -> new HighlanderModConfig(mod))
+                    .getRequiredMods().add(COMMUNITY_HIGHLANDER_DLC2_MOD_ID);
         }
 
         HighlanderModConfig rootModConfig = modsConfig.getModConfigs().get(mod);
