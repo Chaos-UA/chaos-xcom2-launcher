@@ -70,6 +70,11 @@ public class ModDependenciesTable extends XTable {
                         checkBox.setEnabled(false);
                         component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
                     }
+                } else if (colIndex == IGNORED_COLUMN_INDEX) {
+                    JCheckBox checkBox = (JCheckBox) component;
+                    checkBox.setSelected(row.isIgnored());
+                    checkBox.setToolTipText("Ignore this declared dependency");
+                    checkBox.setEnabled(row.getDependencyType() != DependencyType.REQUIRED_REPLACEMENT);
                 }
 
                 if (!row.isActive()) {
@@ -187,6 +192,19 @@ public class ModDependenciesTable extends XTable {
                 getModService().setModActive(row.getMod(), !getModService().isModActive(row.getMod()));
             } else if (column == TARGET_MOD_ID_COLUMN_INDEX) {
                 getModService().setModActive(row.getTargetMod(), !getModService().isModActive(row.getTargetMod()));
+            } else if (column == IGNORED_COLUMN_INDEX && aValue instanceof Boolean) {
+                boolean ignored = (Boolean) aValue;
+                // find declaring mod and matching declared dependency and delegate to ModService
+                Mod declaring = getModService().findModById(row.getDeclaredInMod()).orElse(null);
+                if (declaring != null) {
+                    for (ModDeclaredDependency dd : declaring.getDeclaredDependencies()) {
+                        if (dd.getDependencyType() == row.getDependencyType() && dd.getTargetMod() != null
+                                && dd.getTargetMod().equals(row.getTargetMod())) {
+                            getModService().setIgnoreDependency(declaring, dd, ignored);
+                            break;
+                        }
+                    }
+                }
             } else {
                 super.setValueAt(aValue, rowIndex, column);
             }
