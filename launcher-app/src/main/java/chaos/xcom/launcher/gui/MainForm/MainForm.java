@@ -446,6 +446,7 @@ public class MainForm extends JFrame {
         lblModsCount = new JLabel();
         lblModsCount.setText("0/0");
         lblModsCount.setToolTipText("Total mods count");
+        lblModsCount.setVisible(false);
         panel10.add(lblModsCount, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
     }
 

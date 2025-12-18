@@ -454,7 +454,7 @@ public class SettingsDialog extends JDialog {
         panel4.add(panel5, new GridConstraints(1, 0, 1, 2, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
         cbArgLog = new JCheckBox();
         cbArgLog.setText("-log");
-        cbArgLog.setToolTipText("Opens a separate console (or window) to display the game’s Launch.log in real time. Useful for debugging / checking logs");
+        cbArgLog.setToolTipText("Opens a separate console (or window) to display the game’s Launch.log in real time.\nUseful for debugging / checking logs\nLauncher currently supports Windows only, other OS will have empty output");
         panel5.add(cbArgLog, new GridConstraints(0, 2, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         cbArgNoRedScreens = new JCheckBox();
         cbArgNoRedScreens.setText("-noRedscreens");
@@ -466,11 +466,11 @@ public class SettingsDialog extends JDialog {
         panel5.add(cbArgNoStartupMovies, new GridConstraints(1, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         cbArgRegenerateinis = new JCheckBox();
         cbArgRegenerateinis.setText("-regenerateinis");
-        cbArgRegenerateinis.setToolTipText("Regenerates your user config .ini files on game start, effectively wiping your config folder and creating fresh ones. Useful for troubleshooting, especially with mods");
+        cbArgRegenerateinis.setToolTipText("Regenerates your user config .ini files on game start, effectively wiping your config folder \nand creating fresh ones. Useful for troubleshooting, especially with mods");
         panel5.add(cbArgRegenerateinis, new GridConstraints(1, 2, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         cbArgReview = new JCheckBox();
         cbArgReview.setText("-review");
-        cbArgReview.setToolTipText("Starts the game in normal mode. Without it, the game may launch in a “developer” mode, giving you access to debug features like quick tactical launch and debug strategy start");
+        cbArgReview.setToolTipText("Starts the game in normal mode. Without it, the game may launch in a “developer” mode, giving you access to debug \nfeatures like quick tactical launch and debug strategy start");
         panel5.add(cbArgReview, new GridConstraints(1, 3, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         cbArgNoSeekFreeLoading = new JCheckBox();
         cbArgNoSeekFreeLoading.setText("-noSeekFreeLoading");
@@ -508,6 +508,7 @@ public class SettingsDialog extends JDialog {
         cbGameLogEnabled.setEnabled(true);
         cbGameLogEnabled.setText("xcom-game.log");
         cbGameLogEnabled.setToolTipText("If enabled and game started via launcher then output form process will be written to the file in launcher directory");
+        cbGameLogEnabled.setVisible(false);
         panel6.add(cbGameLogEnabled, new GridConstraints(3, 0, 1, 2, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         final Spacer spacer3 = new Spacer();
         contentPane.add(spacer3, new GridConstraints(4, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_VERTICAL, 1, GridConstraints.SIZEPOLICY_WANT_GROW, null, null, null, 0, false));

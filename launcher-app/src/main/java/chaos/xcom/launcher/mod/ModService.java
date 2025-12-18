@@ -830,18 +830,6 @@ public class ModService {
                 fillRequiredModDependencyAndLoadOrder(mod, requiredMod, anotherMod.getId(), DeclarationSource.HIGHLANDER);
             }
 
-            for (String replacedMod : modConfig.getIgnoreRequiredMods()) {
-                ModLoadOrderDeclaration loadOrder = new ModLoadOrderDeclaration();
-                loadOrder.setMod(mod.getId());
-                loadOrder.setModLoadOrder(ModLoadOrder.AFTER_REQUIRED_REPLACEMENT);
-                loadOrder.setTargetMod(replacedMod);
-                loadOrder.setDeclaredInMod(anotherMod.getId());
-                loadOrder.getSources().add(DeclarationSource.HIGHLANDER);
-                loadOrder.setActive(mod.isActive() && isModActive(replacedMod));
-                loadOrder.setHasError(false);
-                mod.addLoadOrder(loadOrder);
-            }
-
             for (String incompatibleMod : modConfig.getIncompatibleMods()) {
                 String ignoredByMod = findModIgnoringDeclaredDependency(incompatibleMod, DependencyType.INCOMPATIBLE);
                 boolean ignored = ignoredByMod != null;

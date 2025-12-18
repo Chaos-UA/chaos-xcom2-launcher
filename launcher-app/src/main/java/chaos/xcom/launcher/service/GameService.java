@@ -16,6 +16,7 @@ import org.apache.commons.lang3.ObjectUtils;
 
 import javax.swing.*;
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -71,31 +72,51 @@ public class GameService {
 
         try {
             log.info("Starting game: {}", exeFile);
+            if (dbProps.gameLaunchArgs.get().contains("-log")) {
+                if (OsUtils.IS_WINDOWS) { // use cmd.exe to support -log argument.
+                    try {
+                        List<String> command = new ArrayList<>();
+                        command.add("cmd.exe");
+                        command.add("/c"); // use "/k" to keep the console open
+                        // executable (quoted for spaces)
+                        command.add("\"" + exeFile.getAbsolutePath() + "\"");
+                        // arguments
+                        command.addAll(dbProps.gameLaunchArgs.get());
+                        startGame(exeFile, command);
+                        return;
+                    } catch (Exception e) {
+                        log.error("Failed to start XCOM via cmd.exe, fallback to cross-platform exe start", e);
+                    }
+                }
+            }
             List<String> exeCommands = new ArrayList<>();
             exeCommands.add(exeFile.getAbsolutePath());
             exeCommands.addAll(dbProps.gameLaunchArgs.get());
-
-            ProcessBuilder pb = new ProcessBuilder(exeCommands);
-            if (dbProps.gameLogEnabled.isTrue()) {
-                pb.redirectOutput(new File("xcom-game.log").getAbsoluteFile());
-                pb.redirectError(new File("xcom-game.log").getAbsoluteFile());
-            } else {
-                pb.redirectOutput(ProcessBuilder.Redirect.DISCARD);
-                pb.redirectError(ProcessBuilder.Redirect.DISCARD);
-            }
-            pb.directory(exeFile.getParentFile());
-            process = pb.start();
-
-            if (dbProps.exitOnGameLaunch.isTrue()) {
-                log.info("Exiting after game started");
-                System.exit(0);
-            }
+            startGame(exeFile, exeCommands);
         } catch (Exception e) {
             log.error("Failed to start XCOM: {}", exeFile, e);
             JOptionPane.showMessageDialog(SwingService.getLastActiveWindowBounds(),
                     "Failed to start XCOM: " + exeFile.getAbsolutePath() +
                             "\nError: " + e, "Error",
                     JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void startGame(File exeFile, List<String> exeCommands) throws IOException {
+        ProcessBuilder pb = new ProcessBuilder(exeCommands);
+        if (dbProps.gameLogEnabled.isTrue()) {
+            pb.redirectOutput(new File("xcom-game.log").getAbsoluteFile());
+            pb.redirectErrorStream(true);
+        } else {
+            pb.redirectOutput(ProcessBuilder.Redirect.DISCARD);
+            pb.redirectError(ProcessBuilder.Redirect.DISCARD);
+        }
+        pb.directory(exeFile.getParentFile());
+        process = pb.start();
+
+        if (dbProps.exitOnGameLaunch.isTrue()) {
+            log.info("Exiting after game started");
+            System.exit(0);
         }
     }
 

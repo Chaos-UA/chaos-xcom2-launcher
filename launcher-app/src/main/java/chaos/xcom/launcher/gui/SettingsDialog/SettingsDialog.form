@@ -258,7 +258,7 @@
                     </constraints>
                     <properties>
                       <text value="-log"/>
-                      <toolTipText value="Opens a separate console (or window) to display the game’s Launch.log in real time. Useful for debugging / checking logs"/>
+                      <toolTipText value="Opens a separate console (or window) to display the game’s Launch.log in real time.&#10;Useful for debugging / checking logs.&#10;Launcher currently supports Windows only, other OS will have empty output"/>
                     </properties>
                   </component>
                   <component id="9af64" class="javax.swing.JCheckBox" binding="cbArgNoRedScreens">
@@ -285,7 +285,7 @@
                     </constraints>
                     <properties>
                       <text value="-regenerateinis"/>
-                      <toolTipText value="Regenerates your user config .ini files on game start, effectively wiping your config folder and creating fresh ones. Useful for troubleshooting, especially with mods"/>
+                      <toolTipText value="Regenerates your user config .ini files on game start, effectively wiping your config &#10;folder and creating fresh ones. Useful for troubleshooting, especially with mods"/>
                     </properties>
                   </component>
                   <component id="cba0a" class="javax.swing.JCheckBox" binding="cbArgReview">
@@ -294,7 +294,7 @@
                     </constraints>
                     <properties>
                       <text value="-review"/>
-                      <toolTipText value="Starts the game in normal mode. Without it, the game may launch in a “developer” mode, giving you access to debug features like quick tactical launch and debug strategy start"/>
+                      <toolTipText value="Starts the game in normal mode. Without it, the game may launch in a “developer” mode, &#10;giving you access to debug features like quick tactical launch and debug strategy start"/>
                     </properties>
                   </component>
                   <component id="f5b69" class="javax.swing.JCheckBox" binding="cbArgNoSeekFreeLoading">
@@ -387,6 +387,7 @@
                   <enabled value="true"/>
                   <text value="xcom-game.log"/>
                   <toolTipText value="If enabled and game started via launcher then output form process will be written to the file in launcher directory"/>
+                  <visible value="false"/>
                 </properties>
               </component>
             </children>
