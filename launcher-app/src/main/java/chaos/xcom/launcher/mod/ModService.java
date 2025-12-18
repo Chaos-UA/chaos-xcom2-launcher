@@ -122,6 +122,42 @@ public class ModService {
         recalculateModDependencies();
     }
 
+    /**
+     * Search all mods declared dependencies and set ignored flag for the first matching declared dependency
+     * that has the same dependency type and target mod id.
+     */
+    public void setIgnoreDependencyForTarget(String modId,
+                                             DependencyType dependencyType,
+                                             String targetModId,
+                                             boolean ignore) {
+        if (targetModId == null) {
+            return;
+        }
+        if (ignore) {
+            log.info("Setting ignore={} for declared dependencies on target mod {} of type {}",
+                    ignore, targetModId, dependencyType);
+            Mod mod = allMods.get(modId);
+            for (ModDeclaredDependency dd : mod.getDeclaredDependencies()) {
+                if (Objects.equals(dd.getTargetMod(), targetModId)
+                        && dd.getDependencyType() == dependencyType
+                        && !dd.isIgnored()) {
+                    setIgnoreDependency(mod, dd, ignore);
+                    return;
+                }
+            }
+            return;
+        }
+        for (Mod mod : allMods.values()) {
+            for (ModDeclaredDependency dd : mod.getDeclaredDependencies()) {
+                if (Objects.equals(dd.getTargetMod(), targetModId)
+                        && dd.getDependencyType() == dependencyType
+                        && dd.isIgnored() != ignore) {
+                    setIgnoreDependency(mod, dd, ignore);
+                }
+            }
+        }
+    }
+
     public void setSteamModId(Mod mod, String newSteamModId) {
         newSteamModId = StringUtils.trimToNull(newSteamModId);
         if (newSteamModId == null) {

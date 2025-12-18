@@ -410,7 +410,7 @@
                 <properties>
                   <text value="0/0"/>
                   <toolTipText value="Total mods count"/>
-                  <visible value="false"/>
+                  <visible value="true"/>
                 </properties>
               </component>
             </children>

@@ -5,26 +5,20 @@ import chaos.xcom.launcher.gui.component.XTable;
 import chaos.xcom.launcher.gui.component.event.XMouseAdapter;
 import chaos.xcom.launcher.gui.component.event.XTableModel;
 import chaos.xcom.launcher.mod.ModService;
-import chaos.xcom.launcher.mod.dto.DeclarationSource;
 import chaos.xcom.launcher.mod.dto.DependencyType;
 import chaos.xcom.launcher.mod.dto.Mod;
-import chaos.xcom.launcher.mod.dto.ModDeclaredDependency;
 import chaos.xcom.launcher.mod.dto.ModDependency;
-import chaos.xcom.launcher.steam.SteamService;
 import chaos.xcom.launcher.util.ColorConstant;
 import jakarta.enterprise.inject.spi.CDI;
-import org.apache.commons.lang3.StringUtils;
 import org.jdesktop.swingx.decorator.AbstractHighlighter;
 import org.jdesktop.swingx.decorator.ComponentAdapter;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseEvent;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -194,17 +188,9 @@ public class ModDependenciesTable extends XTable {
                 getModService().setModActive(row.getTargetMod(), !getModService().isModActive(row.getTargetMod()));
             } else if (column == IGNORED_COLUMN_INDEX && aValue instanceof Boolean) {
                 boolean ignored = (Boolean) aValue;
-                // find declaring mod and matching declared dependency and delegate to ModService
-                Mod declaring = getModService().findModById(row.getDeclaredInMod()).orElse(null);
-                if (declaring != null) {
-                    for (ModDeclaredDependency dd : declaring.getDeclaredDependencies()) {
-                        if (dd.getDependencyType() == row.getDependencyType() && dd.getTargetMod() != null
-                                && dd.getTargetMod().equals(row.getTargetMod())) {
-                            getModService().setIgnoreDependency(declaring, dd, ignored);
-                            break;
-                        }
-                    }
-                }
+                // Delegate to ModService which will search all mods' declaredDependencies and apply the change
+                ModService modService = getModService();
+                modService.setIgnoreDependencyForTarget(row.getDeclaredInMod(), row.getDependencyType(), row.getTargetMod() , ignored);
             } else {
                 super.setValueAt(aValue, rowIndex, column);
             }
