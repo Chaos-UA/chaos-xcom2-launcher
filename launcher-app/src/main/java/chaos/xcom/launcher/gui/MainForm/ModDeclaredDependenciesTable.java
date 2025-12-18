@@ -28,6 +28,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ModDeclaredDependenciesTable extends XTable {
     private static final int TARGET_MOD_ID_COLUMN_INDEX = 2;
+    private static final int IGNORE_COLUMN_INDEX = 4;
     private ModDependenciesTableModel model;
     private Mod mod;
 
@@ -92,6 +93,11 @@ public class ModDeclaredDependenciesTable extends XTable {
                 if (row == null) {
                     return component;
                 }
+                // if user marked this declared dependency as ignored, show as disabled and don't show errors
+                if (row.isIgnored()) {
+                    component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
+                    return component;
+                }
                 if (row.isHasError()) {
                     component.setBackground(ColorConstant.ERROR);
                 }
@@ -149,6 +155,25 @@ public class ModDeclaredDependenciesTable extends XTable {
                 rows = new ArrayList<>();
             } else {
                 rows = mod.getDeclaredDependencies();
+            }
+        }
+        @Override
+        public boolean isCellEditable(int rowIndex, int columnIndex) {
+            return true;
+        }
+
+        @Override
+        public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
+            if (rowIndex < 0 || rowIndex >= rows.size()) {
+                return;
+            }
+            ModDeclaredDependency row = rows.get(rowIndex);
+            if (columnIndex == IGNORE_COLUMN_INDEX) {
+                boolean ignored = (boolean) aValue;
+                // delegate to service to persist and recalculate
+                ModService.get().setIgnoreDependency(mod, row, ignored);
+            } else {
+                super.setValueAt(aValue, rowIndex, columnIndex);
             }
         }
     }

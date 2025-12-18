@@ -499,6 +499,7 @@ public class SettingsDialog extends JDialog {
         cbExitOnGameLaunch.setToolTipText("Exit after starting XCOM 2 to free RAM memory resources");
         panel7.add(cbExitOnGameLaunch, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         cbGuiSkins = new JComboBox();
+        cbGuiSkins.setToolTipText("After changing skin you may need to restart application to fully apply skin change");
         panel6.add(cbGuiSkins, new GridConstraints(0, 1, 1, 2, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         cbSyncMissingSteamModsOnModsReload = new JCheckBox();
         cbSyncMissingSteamModsOnModsReload.setText("Sync missing Steam info for mods on mods reload");

@@ -91,13 +91,21 @@ public class Mod {
     }
 
     public String toIgnoredDependencyKey(ModDeclaredDependency dependency) {
+        String steamModId = null;
+        if (dependency.getSteamRequiredMod() != null) {
+            steamModId = dependency.getSteamRequiredMod().getSteamModId();
+        }
+        return toIgnoredDependencyKey(dependency.getDependencyType(), dependency.getTargetMod(), steamModId);
+    }
+
+    public String toIgnoredDependencyKey(DependencyType dependencyType, String targetMod, String steamModId) {
         String nonDownloadedSteamModId = null;
-        if (dependency.getTargetMod() == null && dependency.getSteamRequiredMod() != null) {
-            nonDownloadedSteamModId = dependency.getSteamRequiredMod().getSteamModId();
+        if (targetMod == null) {
+            nonDownloadedSteamModId = steamModId;
         }
         return String.format("%s|%s|%s",
-                dependency.getDependencyType(),
-                dependency.getTargetMod(),
+                dependencyType,
+                targetMod,
                 nonDownloadedSteamModId);
     }
 
@@ -193,7 +201,8 @@ public class Mod {
 
     public boolean isExist() {
         if (exist == null) {
-            exist = directory != null && directory.exists() && directory.isDirectory();
+            exist = directory != null && directory.exists() && directory.isDirectory()
+                    && new File(directory + "/" + getId() + ".XComMod").isFile();
         }
         return exist;
     }

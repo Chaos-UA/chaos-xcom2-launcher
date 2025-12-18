@@ -48,7 +48,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Startup
 @Singleton
@@ -581,7 +580,7 @@ public class ModService {
             }
         }
 
-        if (!hasAllSteamRequiredModsInfos(mod)) {
+        if (!hasAllNotIgnoredSteamRequiredModsInfos(mod)) {
             modStatuses.add(ModStatus.MISSING_REQUIRED_STEAM_MOD);
         }
 
@@ -594,17 +593,19 @@ public class ModService {
         }
     }
 
-    private boolean hasAllSteamRequiredModsInfos(Mod mod) {
+    private boolean hasAllNotIgnoredSteamRequiredModsInfos(Mod mod) {
         SteamMod steamMod = mod.getSteamMod();
         for (var requiredSteamMod : steamMod.getRequiredSteamMods()) {
             Mod requiredMod = steamModIdToModMap.get(requiredSteamMod.getSteamModId());
             if (requiredMod == null) {
-                return false;
+                if (!mod.getIgnoredDependenciesKeys().contains(mod.toIgnoredDependencyKey(
+                        DependencyType.REQUIRED, null, requiredSteamMod.getSteamModId()))) {
+                    return false;
+                }
             }
         }
         return true;
     }
-
 
     LinkedHashMap<String, Mod> sortModsForLoadOrder(Collection<Mod> inputMods) {
         List<Mod> mods = new ArrayList<>(inputMods);

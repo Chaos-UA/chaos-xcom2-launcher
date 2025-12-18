@@ -59,10 +59,10 @@ public class ModTable extends XTable {
                 menu.add(deactivateModsItem);
                 menu.addSeparator();
 
-                List<Mod> existingMods = selectedMods.stream()
-                        .filter(mod -> mod.isExist())
+                List<Mod> existingModDirs = selectedMods.stream()
+                        .filter(mod -> mod.getDirectory() != null && mod.getDirectory().isDirectory())
                         .toList();
-                if (!existingMods.isEmpty()) {
+                if (!existingModDirs.isEmpty()) {
                     JMenuItem openDir = new JMenuItem("Open mod directory");
                     openDir.addActionListener(ae -> {
                         try {
@@ -155,7 +155,7 @@ public class ModTable extends XTable {
                         if (mod.getStatuses().contains(ModStatus.DUPLICATE)) {
                             component.setBackground(ColorConstant.ERROR);
                         } else if (mod.isNewMod()) {
-                            //component.setBackground(ColorConstant.NEW_MOD);
+                            component.setForeground(ColorConstant.NEW_MOD);
                         }
                     }
                 }
