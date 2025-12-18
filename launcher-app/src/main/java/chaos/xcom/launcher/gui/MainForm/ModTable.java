@@ -4,8 +4,7 @@ package chaos.xcom.launcher.gui.MainForm;
 import chaos.xcom.launcher.gui.component.XTable;
 import chaos.xcom.launcher.gui.component.event.XMouseAdapter;
 import chaos.xcom.launcher.mod.ModService;
-import chaos.xcom.launcher.mod.dto.Mod;
-import chaos.xcom.launcher.mod.dto.ModStatus;
+import chaos.xcom.launcher.mod.dto.*;
 import chaos.xcom.launcher.steam.SteamService;
 import chaos.xcom.launcher.swing.SwingService;
 import chaos.xcom.launcher.util.ColorConstant;
@@ -160,7 +159,18 @@ public class ModTable extends XTable {
                     }
                 }
 
-                if (adapter.column == 6 && getModService().hasDeclaredUserDependency(mod)) { // Declared dependencies
+                boolean hasIgnoredDeclaredDependency = mod.getDeclaredDependencies().stream()
+                        .anyMatch(ModDeclaredDependency::isIgnored);
+                boolean hasIgnoredFinalDependency = mod.getDependencies().stream()
+                        .anyMatch(ModDependency::isIgnored);
+                boolean hasUserFinalDependency = mod.getDependencies().stream()
+                        .anyMatch(v -> v.getSources().contains(DeclarationSource.USER));
+                if (adapter.column == 5 // Final dependencies
+                        && (hasIgnoredFinalDependency || hasUserFinalDependency)) {
+                    JLabel lbl = (JLabel) component;
+                    lbl.setText("<html><strong>" + lbl.getText() + "</strong></html>");
+                } else if (adapter.column == 6  // Declared dependencies
+                        && (hasIgnoredDeclaredDependency || getModService().hasDeclaredUserDependency(mod))) {
                     JLabel lbl = (JLabel) component;
                     lbl.setText("<html><strong>" + lbl.getText() + "</strong></html>");
                 } else if (adapter.column == 8) { // STEAM MOD ID COLUMN

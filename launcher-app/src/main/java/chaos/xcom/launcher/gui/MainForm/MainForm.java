@@ -67,6 +67,7 @@ public class MainForm extends JFrame {
     private FlatEditorPane epXcomGameIni;
     private FlatTabbedPane tpModInfo;
     private XScrollPane spXcomGameIni;
+    private JLabel lblModsCount;
     private final MainFormMenuBar mainFormMenuBar;
     private final SwingService swingService;
     @Getter
