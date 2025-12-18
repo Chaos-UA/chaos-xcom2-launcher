@@ -2,6 +2,7 @@ package chaos.xcom.launcher.mod;
 
 import chaos.db.gen.tables.records.ModRecord;
 import chaos.db.gen.tables.records.UserModRuleRecord;
+import chaos.xcom.launcher.common.JsonConverter;
 import chaos.xcom.launcher.db.property.DbProperties;
 import chaos.xcom.launcher.event.SkinChangeEvent;
 import chaos.xcom.launcher.gui.EditModDependencyDialog.EditModDependencyDialog;
@@ -28,6 +29,7 @@ import chaos.xcom.launcher.util.SortUtils.SortItem;
 import chaos.xcom.launcher.util.SortUtils.SortResult;
 import chaos.xcom.launcher.util.XComModFinderUtils;
 import chaos.xcom.launcher.util.XComUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
 import io.quarkus.runtime.Startup;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -62,6 +64,7 @@ public class ModService {
      * Required to be injected before this class init to already init skin.
      */
     private final LookAndFeelService lookAndFeelService;
+    private final JsonConverter jsonConverter;
     private MainForm mainForm;
     private final ModRepository modRepository;
     private final SteamService steamService;
@@ -106,6 +109,18 @@ public class ModService {
         } catch (Exception e) {
             log.error("Failed to recreate form", e);
         }
+    }
+
+    public void setIgnoreDependency(Mod mod, ModDeclaredDependency dependency, boolean ignore) {
+        String ignoreDependencyKey = mod.toIgnoredDependencyKey(dependency);
+        if (ignore) {
+            mod.getIgnoredDependenciesKeys().add(ignoreDependencyKey);
+        } else {
+            mod.getIgnoredDependenciesKeys().remove(ignoreDependencyKey);
+        }
+        log.info("Mod {} ignored={} declared dependency {}", mod.getId(), ignore, ignoreDependencyKey);
+        saveModToDb(mod);
+        recalculateModDependencies();
     }
 
     public void setSteamModId(Mod mod, String newSteamModId) {
@@ -244,6 +259,13 @@ public class ModService {
         modDbRecord.setSizeBytes(mod.getSize());
         SteamMod steamMod = mod.getSteamMod();
         modDbRecord.setSteamModId(steamMod.getSteamModId());
+
+        // save ignored dependencies if exist
+        Set<String> ignoredDependenciesKeys = mod.getIgnoredDependenciesKeys();
+        Set<String> dependenciesKeys = mod.getDeclaredDependencies().stream()
+                .map(mod::toIgnoredDependencyKey).collect(Collectors.toSet());
+        ignoredDependenciesKeys.removeIf(v -> !dependenciesKeys.contains(v));
+        modDbRecord.setIgnoredDependenciesKeys(jsonConverter.toJson(ignoredDependenciesKeys));
         return modDbRecord;
     }
 
@@ -1180,6 +1202,12 @@ public class ModService {
                 if (new File(modDbRecord.getDirectory()).equals(mod.getDirectory())) {
                     mod.setSize(modDbRecord.getSizeBytes());
                 }
+            }
+            try {
+                mod.setIgnoredDependenciesKeys(jsonConverter.parse(
+                        modDbRecord.getIgnoredDependenciesKeys(), new TypeReference<>() {}));
+            } catch (Exception e) {
+                log.error("Failed to parse ignored dependencies from DB for Mod {}", mod.getId());
             }
             mod.setSteamDbModId(modDbRecord.getSteamModId());
             if (mod.getSteamDbModId() != null) {

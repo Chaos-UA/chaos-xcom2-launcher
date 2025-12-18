@@ -13,4 +13,5 @@ public class ModDeclaredDependency {
     private SteamRequiredMod steamRequiredMod;
     private TreeSet<DeclarationSource> sources = new TreeSet<>();
     private boolean hasError;
+    private boolean isIgnored;
 }

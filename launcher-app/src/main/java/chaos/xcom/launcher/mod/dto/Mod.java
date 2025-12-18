@@ -55,7 +55,7 @@ public class Mod {
     private int loadOrder;
     private HighlanderModsConfig highlanderModsConfig = new HighlanderModsConfig();
 
-
+    private HashSet<String> ignoredDependenciesKeys = new HashSet<>();
     private List<ModDeclaredDependency> declaredDependencies = new ArrayList<>();
     /**
      * TODO
@@ -82,7 +82,23 @@ public class Mod {
             }
         }
 
+        dependency.setIgnored(isDependencyIgnored(dependency));
         declaredDependencies.add(dependency);
+    }
+
+    boolean isDependencyIgnored(ModDeclaredDependency dependency) {
+        return ignoredDependenciesKeys.contains(toIgnoredDependencyKey(dependency));
+    }
+
+    public String toIgnoredDependencyKey(ModDeclaredDependency dependency) {
+        String nonDownloadedSteamModId = null;
+        if (dependency.getTargetMod() == null && dependency.getSteamRequiredMod() != null) {
+            nonDownloadedSteamModId = dependency.getSteamRequiredMod().getSteamModId();
+        }
+        return String.format("%s|%s|%s",
+                dependency.getDependencyType(),
+                dependency.getTargetMod(),
+                nonDownloadedSteamModId);
     }
 
     public void addLoadOrderGroupDeclaration(ModLoadOrderGroupDeclaration loadOrderGroupDeclaration) {

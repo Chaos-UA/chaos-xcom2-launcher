@@ -139,7 +139,8 @@ public class ModDeclaredDependenciesTable extends XTable {
                         public String apply(ModDeclaredDependency declarationSource) {
                             return declarationSource.getSources().stream().map(v -> v.name()).collect(Collectors.joining(", "));
                         }
-                    })
+                    }),
+                    new TableColumn<>("Ignore", Boolean.class, ModDeclaredDependency::isIgnored),
             };
         }
 

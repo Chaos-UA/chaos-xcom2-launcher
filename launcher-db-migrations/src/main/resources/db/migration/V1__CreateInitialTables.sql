@@ -11,7 +11,7 @@ CREATE TABLE property
 
 CREATE TABLE user_mod_rule
 (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
     mod1_id TEXT NOT NULL,
     type    TEXT NOT NULL,
     mod2_id TEXT NOT NULL
@@ -19,13 +19,14 @@ CREATE TABLE user_mod_rule
 
 CREATE TABLE mod
 (
-    id           TEXT PRIMARY KEY,
-    title        TEXT,
-    is_active    BOOLEAN NOT NULL,
-    is_new       BOOLEAN NOT NULL,
-    directory    TEXT    NOT NULL,
-    size_bytes   INTEGER NULL,
-    steam_mod_id TEXT
+    id                        TEXT PRIMARY KEY,
+    title                     TEXT,
+    is_active                 BOOLEAN NOT NULL,
+    is_new                    BOOLEAN NOT NULL,
+    directory                 TEXT    NOT NULL,
+    ignored_dependencies_keys TEXT    NOT NULL,
+    size_bytes                INTEGER NULL,
+    steam_mod_id              TEXT
 );
 CREATE INDEX idx_mod_steam__id ON mod (steam_mod_id);
 
