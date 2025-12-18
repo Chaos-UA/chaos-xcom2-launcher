@@ -103,6 +103,9 @@ public class ModDeclaredDependenciesTable extends XTable {
                 }
                 if (row.getTargetMod() == null && adapter.column == TARGET_MOD_ID_COLUMN_INDEX) {
                     component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
+                } else if (adapter.column == IGNORE_COLUMN_INDEX) {
+                    JCheckBox checkBox = (JCheckBox) component;
+                    checkBox.setEnabled(row.getDependencyType() != DependencyType.REPLACED);
                 }
                 return component;
             }
@@ -159,6 +162,12 @@ public class ModDeclaredDependenciesTable extends XTable {
         }
         @Override
         public boolean isCellEditable(int rowIndex, int columnIndex) {
+            if (rowIndex < 0 || rowIndex >= rows.size()) return false;
+            ModDeclaredDependency row = rows.get(rowIndex);
+            // Ignore column editable only when dependency is not REPLACED
+            if (columnIndex == IGNORE_COLUMN_INDEX) {
+                return row.getDependencyType() != DependencyType.REPLACED;
+            }
             return true;
         }
 
