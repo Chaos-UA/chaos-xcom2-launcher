@@ -8,6 +8,7 @@ import chaos.xcom.launcher.mod.ModService;
 import chaos.xcom.launcher.mod.dto.DeclarationSource;
 import chaos.xcom.launcher.mod.dto.DependencyType;
 import chaos.xcom.launcher.mod.dto.Mod;
+import chaos.xcom.launcher.mod.dto.ModDeclaredDependency;
 import chaos.xcom.launcher.mod.dto.ModDependency;
 import chaos.xcom.launcher.steam.SteamService;
 import chaos.xcom.launcher.util.ColorConstant;
@@ -30,6 +31,7 @@ import java.util.stream.Collectors;
 public class ModDependenciesTable extends XTable {
     private static int MOD_ID_COLUMN_INDEX = 0;
     private static int TARGET_MOD_ID_COLUMN_INDEX = 2;
+    private static int IGNORED_COLUMN_INDEX = 6;
 
     private ModDependenciesModel model;
     private Mod mod;
@@ -158,7 +160,8 @@ public class ModDependenciesTable extends XTable {
                         public String apply(ModDependency modDependency) {
                             return modDependency.getSources().stream().map(Enum::name).collect(Collectors.joining(", "));
                         }
-                    })
+                    }),
+                    new TableColumn<>("Ignored", Boolean.class, ModDependency::isIgnored)
             };
         }
 
@@ -184,6 +187,19 @@ public class ModDependenciesTable extends XTable {
                 getModService().setModActive(row.getMod(), !getModService().isModActive(row.getMod()));
             } else if (column == TARGET_MOD_ID_COLUMN_INDEX) {
                 getModService().setModActive(row.getTargetMod(), !getModService().isModActive(row.getTargetMod()));
+            } else if (column == IGNORED_COLUMN_INDEX) {
+                boolean ignored = (Boolean) aValue;
+                // delegate to ModService: find declaring mod and matching declared dependency
+                Mod declaring = getModService().findModById(row.getDeclaredInMod()).orElse(null);
+                if (declaring != null) {
+                    for (ModDeclaredDependency dd : declaring.getDeclaredDependencies()) {
+                        if (dd.getDependencyType() == DependencyType.REQUIRED && dd.getTargetMod() != null
+                                && dd.getTargetMod().equals(row.getTargetMod())) {
+                            getModService().setIgnoreDependency(declaring, dd, ignored);
+                            break;
+                        }
+                    }
+                }
             } else {
                 super.setValueAt(aValue, rowIndex, column);
             }

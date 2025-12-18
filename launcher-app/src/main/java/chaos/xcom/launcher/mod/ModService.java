@@ -845,7 +845,7 @@ public class ModService {
             for (String incompatibleMod : modConfig.getIncompatibleMods()) {
                 ModDependency modDependency = new ModDependency();
                 modDependency.setMod(mod.getId());
-                modDependency.setDeclaredInMod(mod.getId());
+                modDependency.setDeclaredInMod(anotherMod.getId());
                 modDependency.setDependencyType(DependencyType.INCOMPATIBLE);
                 modDependency.setTargetMod(incompatibleMod);
                 modDependency.getSources().add(DeclarationSource.HIGHLANDER);
@@ -935,6 +935,7 @@ public class ModService {
         modDependency.setDependencyType(DependencyType.REQUIRED);
         modDependency.setTargetMod(requiredMod);
         modDependency.getSources().add(source);
+        modDependency.setIgnored(declarationIgnored);
         modDependency.setActive(mod.isActive() && !declarationIgnored);
         modDependency.setHasError(!isModOrReplacementModActive(requiredMod) && !declarationIgnored);
         if (ignoredByModId != null) {
@@ -985,90 +986,6 @@ public class ModService {
             mod.addLoadOrder(loadOrder2);
         }
     }
-
-//    void prepareFinalDependenciesAndLoadOrders(Map<String, LinkedHashSet<String>> requiredModReplacedByAlternativeModsMap,
-//                                               LinkedHashMap<String, Mod> mods) {
-//        for (int i = 0; i < mods.size(); i++) {
-//            Mod mod = mods.get(i);
-//            for (ModDeclaredDependency declaredDependency : mod.getDeclaredDependencies()) {
-//                if (declaredDependency.getTargetMod() == null || declaredDependency.getDependencyType() != DependencyType.REQUIRED) {
-//                    continue;
-//                }
-//                appendLoadAfterRequiredMods(mod, declaredDependency.getTargetMod(), mod.getId(),
-//                        requiredModReplacedByAlternativeModsMap);
-//            }
-//
-//            for (int j = i; j < mods.size(); j++) {
-//                Mod laterMod = mods.get(j);
-//                boolean isCurrentMod = i == j;
-//                HighlanderModConfig modConfig = laterMod.getHighlanderModsConfig().getModConfigs().get(mod.getId());
-//                if (modConfig != null) { // later mod may override previous mod
-//                    if (modConfig.getRunPriorityGroup() != null) {
-//                        ModLoadOrderGroupDeclaration loadOrderDeclaration = new ModLoadOrderGroupDeclaration();
-//                        loadOrderDeclaration.setDeclaredInMod(laterMod.getId());
-//                        loadOrderDeclaration.setModLoadOrderGroup(modConfig.getRunPriorityGroup());
-//                        loadOrderDeclaration.setTargetMod(mod.getId());
-//                        mod.addLoadOrderGroupDeclaration(loadOrderDeclaration);
-//                    }
-//
-//                    if (!isCurrentMod) {
-//                        for (String requiredMod : modConfig.getRequiredMods()) {
-//                            ModLoadOrderDeclaration loadOrderDeclaration = new ModLoadOrderDeclaration();
-//                            loadOrderDeclaration.setMod(mod.getId());
-//                            loadOrderDeclaration.setDeclaredInMod(laterMod.getId());
-//                            loadOrderDeclaration.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
-//                            loadOrderDeclaration.setTargetMod(requiredMod);
-//                            mod.addLoadOrderDeclaration(loadOrderDeclaration);
-//
-//                            LinkedHashSet<String> requiredModIgnoredByMods = requiredModReplacedByAlternativeModsMap.getOrDefault(requiredMod, new LinkedHashSet<>());
-//                            for (String requiredModIgnoredByMod : requiredModIgnoredByMods) {
-//                                if (loadOrderDeclaration.getOverriddenByMod() == null) {
-//                                    loadOrderDeclaration.setOverriddenByMod(requiredModIgnoredByMod);
-//                                }
-//                                ModLoadOrderDeclaration loadOrder2 = new ModLoadOrderDeclaration();
-//                                loadOrder2.setMod(mod.getId());
-//                                loadOrder2.setDeclaredInMod(laterMod.getId());
-//                                loadOrder2.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
-//                                loadOrder2.setTargetMod(requiredModIgnoredByMod);
-//                                mod.addLoadOrderDeclaration(loadOrder2);
-//                            }
-//                        }
-//                    }
-//                    for (RunOrderDeclaration runOrder : modConfig.getRunOrderDeclarations()) {
-//                        ModLoadOrderDeclaration loadOrderDeclaration = new ModLoadOrderDeclaration();
-//                        loadOrderDeclaration.setMod(mod.getId());
-//                        loadOrderDeclaration.setDeclaredInMod(laterMod.getId());
-//                        loadOrderDeclaration.setModLoadOrder(runOrder.getModLoadOrder());
-//                        loadOrderDeclaration.setTargetMod(runOrder.getTargetMod());
-//                        mod.addLoadOrderDeclaration(loadOrderDeclaration);
-//                    }
-//                }
-//            }
-//        }
-//    }
-//
-//    private void appendLoadAfterRequiredMods(Mod mod, String requiredModId, String declaredInMod,
-//                                             Map<String, LinkedHashSet<String>> requiredModIgnoredByAlternativeModsMap) {
-//        ModLoadOrderDeclaration loadOrderDeclaration = new ModLoadOrderDeclaration();
-//        loadOrderDeclaration.setMod(mod.getId());
-//        loadOrderDeclaration.setDeclaredInMod(declaredInMod);
-//        loadOrderDeclaration.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
-//        loadOrderDeclaration.setTargetMod(requiredModId);
-//        mod.addLoadOrderDeclaration(loadOrderDeclaration);
-//
-//        LinkedHashSet<String> requiredModIgnoredByMods = requiredModIgnoredByAlternativeModsMap.getOrDefault(requiredModId, new LinkedHashSet<>());
-//        for (String requiredModIgnoredByMod : requiredModIgnoredByMods) {
-//            if (loadOrderDeclaration.getOverriddenByMod() == null) {
-//                loadOrderDeclaration.setOverriddenByMod(requiredModIgnoredByMod);
-//            }
-//            ModLoadOrderDeclaration loadOrder2 = new ModLoadOrderDeclaration();
-//            loadOrder2.setMod(mod.getId());
-//            loadOrder2.setDeclaredInMod(declaredInMod);
-//            loadOrder2.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
-//            loadOrder2.setTargetMod(requiredModIgnoredByMod);
-//            mod.addLoadOrderDeclaration(loadOrder2);
-//        }
-//    }
 
     /**
      * Sort by before/after/required/ignoreRequired without priority group at first step.

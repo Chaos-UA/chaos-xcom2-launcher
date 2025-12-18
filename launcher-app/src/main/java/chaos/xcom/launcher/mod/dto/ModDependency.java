@@ -13,5 +13,6 @@ public class ModDependency {
     private String overriddenByMod;
     private TreeSet<DeclarationSource> sources = new TreeSet<>();
     private boolean isActive;
+    private boolean isIgnored;
     private boolean hasError;
 }
