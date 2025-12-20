@@ -408,6 +408,7 @@ class SortUtilsTest {
             sb.append("   ").append(item1).append(" index: ").append(index1).append("\n");
             sb.append("   ").append(item2).append(" index: ").append(index2).append("\n\n");
             sb.append(toResolvedItemsString(sorted));
+            throw new AssertionError(sb.toString());
         }
     }
 
