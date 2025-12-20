@@ -50,34 +50,26 @@ public class SortUtils {
     /* =======================
        Public API
        ======================= */
-    public static <T> SortResult<T> sort(List<SortItem<T>> items) {
-        LinkedHashMap<T, SortItem<T>> map = new LinkedHashMap<>();
-        for (SortItem<T> item : items) {
-            map.put(item.getValue(), item);
-        }
-        return sort(map);
-    }
 
-    public static <T> SortResult<T> sort(Map<T, SortItem<T>> input) {
-        Map<T, SortItemOneDirection<T>> oneDir = convert(input);
+    public static <T> SortResult<T> sort(Collection<SortItem<T>> input) {
+        Collection<SortItemOneDirection<T>> oneDir = convert(input);
         return sortOneDirection(oneDir);
     }
 
     /* =======================
        Conversion: before/after → after-only
        ======================= */
-    private static <T> Map<T, SortItemOneDirection<T>> convert(
-            Map<T, SortItem<T>> input
+    private static <T> Collection<SortItemOneDirection<T>> convert(Collection<SortItem<T>> input
     ) {
         Map<T, SortItemOneDirection<T>> result = new LinkedHashMap<>();
 
-        for (T v : input.keySet()) {
+        for (SortItem<T> v : input) {
             SortItemOneDirection<T> od = new SortItemOneDirection<>();
-            od.setValue(v);
-            result.put(v, od);
+            od.setValue(v.getValue());
+            result.put(v.getValue(), od);
         }
 
-        for (SortItem<T> item : input.values()) {
+        for (SortItem<T> item : input) {
             T v = item.getValue();
 
             // v must be AFTER x → x -> v
@@ -95,24 +87,22 @@ public class SortUtils {
             }
         }
 
-        return result;
+        return result.values();
     }
 
     /* =======================
        Core algorithm
        ======================= */
-    private static <T> SortResult<T> sortOneDirection(
-            Map<T, SortItemOneDirection<T>> items
-    ) {
+    private static <T> SortResult<T> sortOneDirection(Collection<SortItemOneDirection<T>> items) {
         Map<T, List<T>> graph = new LinkedHashMap<>();
         Map<T, Integer> indegree = new LinkedHashMap<>();
 
-        for (T v : items.keySet()) {
-            graph.put(v, new ArrayList<>());
-            indegree.put(v, 0);
+        for (SortItemOneDirection<T> v : items) {
+            graph.put(v.getValue(), new ArrayList<>());
+            indegree.put(v.getValue(), 0);
         }
 
-        for (SortItemOneDirection<T> item : items.values()) {
+        for (SortItemOneDirection<T> item : items) {
             for (T after : item.getAfterValues()) {
                 graph.get(item.getValue()).add(after);
                 indegree.put(after, indegree.get(after) + 1);

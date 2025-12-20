@@ -1067,7 +1067,7 @@ public class ModService {
             }
             sortItemMap.put(mod.getId(), sortItem);
         }
-        SortResult<String> sortResult = SortUtils.sort(sortItemMap);
+        SortResult<String> sortResult = SortUtils.sort(sortItemMap.values());
         if (!sortResult.getCycles().isEmpty()) {
             for (List<String> cycleModsGroup : sortResult.getCycles()) {
                 log.warn("Found mods cycle group: {}", cycleModsGroup);
@@ -1107,7 +1107,7 @@ public class ModService {
 
             sortItemMap.put(mod.getId(), sortItem);
         }
-        SortResult<String> sortResult = SortUtils.sort(sortItemMap);
+        SortResult<String> sortResult = SortUtils.sort(sortItemMap.values());
         if (!sortResult.getCycles().isEmpty()) {
             for (List<String> cycleModsGroup : sortResult.getCycles()) {
                 log.warn("Found mods cycle group: {}", cycleModsGroup);
