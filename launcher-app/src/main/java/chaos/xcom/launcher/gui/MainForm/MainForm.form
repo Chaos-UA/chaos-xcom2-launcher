@@ -394,7 +394,7 @@
                   <horizontalAlignment value="2"/>
                   <horizontalTextPosition value="2"/>
                   <text value=""/>
-                  <toolTipText value="Some active mods have errors"/>
+                  <toolTipText value="Some active mods have errors and might work not properly.&#10;Manual resolve needed."/>
                   <visible value="false"/>
                 </properties>
               </component>
