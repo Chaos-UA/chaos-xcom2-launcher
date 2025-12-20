@@ -1,4 +1,3 @@
-
 package chaos.xcom.launcher.util;
 
 import lombok.Data;
@@ -96,38 +95,42 @@ public class SortUtils {
     private static <T> SortResult<T> sortOneDirection(Collection<SortItemOneDirection<T>> items) {
         Map<T, List<T>> graph = new LinkedHashMap<>();
         Map<T, Integer> indegree = new LinkedHashMap<>();
+        List<T> inputOrder = new ArrayList<>();
 
         for (SortItemOneDirection<T> v : items) {
-            graph.put(v.getValue(), new ArrayList<>());
-            indegree.put(v.getValue(), 0);
+            T value = v.getValue();
+            graph.put(value, new ArrayList<>());
+            indegree.put(value, 0);
+            inputOrder.add(value);
         }
 
         for (SortItemOneDirection<T> item : items) {
             for (T after : item.getAfterValues()) {
+                // ignore unknown targets
+                if (!graph.containsKey(after)) {
+                    continue;
+                }
                 graph.get(item.getValue()).add(after);
                 indegree.put(after, indegree.get(after) + 1);
             }
         }
 
-        /* ---------- Kahn ---------- */
-        Queue<T> queue = new ArrayDeque<>();
-        for (var e : indegree.entrySet()) {
-            if (e.getValue() == 0) {
-                queue.add(e.getKey());
-            }
+        /* ---------- Stable Kahn (preserve input order among available nodes) ---------- */
+        Map<T, Integer> inputIndex = new HashMap<>();
+        for (int i = 0; i < inputOrder.size(); i++) {
+            inputIndex.put(inputOrder.get(i), i);
         }
 
+        PriorityQueue<T> pq = new PriorityQueue<>(Comparator.comparingInt(inputIndex::get));
+        for (T node : inputOrder) if (indegree.get(node) == 0) pq.add(node);
+
         List<T> sorted = new ArrayList<>();
-
-        while (!queue.isEmpty()) {
-            T v = queue.poll();
+        while (!pq.isEmpty()) {
+            T v = pq.poll();
             sorted.add(v);
-
-            for (T next : graph.get(v)) {
-                indegree.put(next, indegree.get(next) - 1);
-                if (indegree.get(next) == 0) {
-                    queue.add(next);
-                }
+            for (T nxt : graph.get(v)) {
+                indegree.put(nxt, indegree.get(nxt) - 1);
+                if (indegree.get(nxt) == 0) pq.add(nxt);
             }
         }
 
@@ -138,30 +141,26 @@ public class SortUtils {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
         List<List<T>> cycles = new ArrayList<>();
-
         if (remaining.isEmpty()) {
             return new SortResult<>(sorted, cycles);
         }
 
         List<Set<T>> sccs = findSCCs(graph, remaining);
+        // collect cycle SCCs (size>1 or self-loop if present)
+        List<Set<T>> cycleSCCs = sccs.stream().filter(s -> s.size() > 1).toList();
+        Set<T> cycleNodes = cycleSCCs.stream().flatMap(Set::stream).collect(Collectors.toCollection(LinkedHashSet::new));
+        for (Set<T> scc : cycleSCCs) cycles.add(new ArrayList<>(scc));
 
-        Set<T> cycleNodes = new LinkedHashSet<>();
-        for (Set<T> scc : sccs) {
-            if (scc.size() > 1) {
-                cycles.add(new ArrayList<>(scc));
-                cycleNodes.addAll(scc);
-            }
-        }
-
-        /* ---------- Placement ---------- */
-        List<T> beforeCycle = new ArrayList<>();
-        List<T> afterCycle = new ArrayList<>();
-
+        /* ---------- Final merge: Emit in phases (all respecting input order):
+           1) sorted acyclic nodes (from Kahn) excluding cycle-related nodes
+           2) nodes that can reach cycles (preCycle)
+           3) cycle SCC blocks (in input order)
+           4) nodes reachable from cycles (postCycle)
+           5) any remaining nodes
+         */
         // Build reverse graph for reachability checks
         Map<T, List<T>> reverseGraph = new LinkedHashMap<>();
-        for (T v : graph.keySet()) {
-            reverseGraph.put(v, new ArrayList<>());
-        }
+        for (T v : graph.keySet()) reverseGraph.put(v, new ArrayList<>());
         for (Map.Entry<T, List<T>> e : graph.entrySet()) {
             T from = e.getKey();
             for (T to : e.getValue()) {
@@ -169,82 +168,78 @@ public class SortUtils {
             }
         }
 
-        // Compute nodes reachable from cycle nodes (cycle -> ... -> node)
-        Set<T> reachableFromCycle = new LinkedHashSet<>();
-        ArrayDeque<T> q = new ArrayDeque<>();
-        for (T c : cycleNodes) {
-            q.add(c);
-        }
+        // compute postCycle: nodes reachable from any cycle node
+        Set<T> postCycle = new LinkedHashSet<>();
+        ArrayDeque<T> q = new ArrayDeque<>(cycleNodes);
         while (!q.isEmpty()) {
             T cur = q.poll();
-            for (T neigh : graph.get(cur)) {
-                if (!reachableFromCycle.contains(neigh) && !cycleNodes.contains(neigh)) {
-                    reachableFromCycle.add(neigh);
-                    q.add(neigh);
-                }
+            for (T nxt : graph.getOrDefault(cur, List.of())) {
+                if (!cycleNodes.contains(nxt) && postCycle.add(nxt)) q.add(nxt);
             }
         }
 
-        // Compute nodes that can reach cycle nodes (node -> ... -> cycle)
-        Set<T> canReachCycle = new LinkedHashSet<>();
+        // compute preCycle: nodes that can reach cycle nodes
+        Set<T> preCycle = new LinkedHashSet<>();
         q.clear();
-        for (T c : cycleNodes) {
-            q.add(c);
-        }
+        q.addAll(cycleNodes);
         while (!q.isEmpty()) {
             T cur = q.poll();
-            for (T pred : reverseGraph.get(cur)) {
-                if (!canReachCycle.contains(pred) && !cycleNodes.contains(pred)) {
-                    canReachCycle.add(pred);
-                    q.add(pred);
+            for (T prev : reverseGraph.getOrDefault(cur, List.of())) {
+                if (!cycleNodes.contains(prev) && preCycle.add(prev)) q.add(prev);
+            }
+        }
+
+        List<T> finalSorted = new ArrayList<>();
+        Set<T> emitted = new HashSet<>();
+
+        // Map node -> its SCC for quick lookup
+        Map<T, Set<T>> nodeToScc = new HashMap<>();
+        for (Set<T> scc : cycleSCCs) for (T v : scc) nodeToScc.put(v, scc);
+
+        // 1) emit sorted acyclic nodes that are not part of cycles or postCycle (these came from Kahn)
+        for (T node : inputOrder) {
+            if (sorted.contains(node) && !cycleNodes.contains(node) && !postCycle.contains(node) && !emitted.contains(node)) {
+                finalSorted.add(node);
+                emitted.add(node);
+            }
+        }
+
+        // 2) emit preCycle nodes in input order
+        for (T node : inputOrder) {
+            if (preCycle.contains(node) && !emitted.contains(node)) {
+                finalSorted.add(node);
+                emitted.add(node);
+            }
+        }
+
+        // 3) emit cycle SCCs in input order (emit each SCC members in input order)
+        for (T node : inputOrder) {
+            if (cycleNodes.contains(node) && !emitted.contains(node)) {
+                Set<T> scc = nodeToScc.get(node);
+                for (T n : inputOrder) {
+                    if (scc.contains(n) && !emitted.contains(n)) {
+                        finalSorted.add(n);
+                        emitted.add(n);
+                    }
                 }
             }
         }
 
-        for (T v : remaining) {
-            if (cycleNodes.contains(v)) {
-                continue;
+        // 4) emit postCycle nodes in input order
+        for (T node : inputOrder) {
+            if (postCycle.contains(node) && !emitted.contains(node)) {
+                finalSorted.add(node);
+                emitted.add(node);
             }
-
-            boolean comesAfterCycle = false;
-            boolean comesBeforeCycle = false;
-
-            // transitive relationships: if reachable from cycle -> comes after
-            if (reachableFromCycle.contains(v)) {
-                comesAfterCycle = true;
-            }
-
-            // if can reach cycle -> comes before
-            if (canReachCycle.contains(v)) {
-                comesBeforeCycle = true;
-            }
-
-            // If both flags false, this node is unrelated (kept as unrelated)
-            if (comesBeforeCycle && !comesAfterCycle) {
-                beforeCycle.add(v);
-            } else if (comesAfterCycle && !comesBeforeCycle) {
-                afterCycle.add(v);
-            }
-            // else: unrelated -> will be handled below
         }
 
-        // Collect remaining unrelated nodes (were not in Kahn result)
-        Set<T> others = new LinkedHashSet<>(remaining);
-        others.removeAll(cycleNodes);
-        others.removeAll(beforeCycle);
-        others.removeAll(afterCycle);
-        List<T> unrelated = new ArrayList<>(others);
-
-        // Ensure removed items are not duplicated
-        sorted.removeAll(beforeCycle);
-        sorted.removeAll(afterCycle);
-        sorted.removeAll(unrelated);
-
-        List<T> finalSorted = new ArrayList<>(sorted);
-        finalSorted.addAll(beforeCycle);
-        finalSorted.addAll(unrelated);   // put unrelated before cycles to keep constraints safe
-        finalSorted.addAll(cycleNodes);
-        finalSorted.addAll(afterCycle);
+        // 5) any remaining (fallback)
+        for (T node : inputOrder) {
+            if (!emitted.contains(node)) {
+                finalSorted.add(node);
+                emitted.add(node);
+            }
+        }
 
         return new SortResult<>(finalSorted, cycles);
     }

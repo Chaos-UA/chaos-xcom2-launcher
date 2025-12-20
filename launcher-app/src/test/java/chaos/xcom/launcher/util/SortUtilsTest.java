@@ -217,7 +217,6 @@ class SortUtilsTest {
         assertTrue(indexM < indexN && indexN < indexO);
     }
 
-
     @Test
     void testDependOnModFromCycle() {
         // Cycle: 2 -> 3 -> 4 -> 2
@@ -376,7 +375,9 @@ class SortUtilsTest {
 
         assertBefore(result.getSorted(), "c", "a1");
         assertBefore(result.getSorted(), "c", "a2");
-        assertBefore(result.getSorted(), "c", "gg");
+        assertBefore(result.getSorted(), "c", "gg1");
+        assertBefore(result.getSorted(), "c", "gg2");
+        assertBefore(result.getSorted(), "c", "gg3");
 
         assertBefore(result.getSorted(), "a2", "a1");
 
