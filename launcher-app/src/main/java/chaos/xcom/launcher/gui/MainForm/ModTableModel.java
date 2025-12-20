@@ -54,12 +54,18 @@ public class ModTableModel extends XTableModel<Mod> {
                                 + ModService.get().getDeclaredUserDependenciesSize(mod);
                     }
                 }),
-                new TableColumn<>("Highlander Group", HighlanderRunPriorityGroup.class, new Function<Mod, HighlanderRunPriorityGroup>() {
+                new TableColumn<>("Highlander Group", String.class, new Function<Mod, String>() {
                     @Override
-                    public HighlanderRunPriorityGroup apply(Mod mod) {
-                        return mod.getHighlanderGroupLoadOrders().isEmpty()
+                    public String apply(Mod mod) {
+                        HighlanderRunPriorityGroup grp = mod.getHighlanderGroupLoadOrders().isEmpty()
                                 ? HighlanderRunPriorityGroup.STANDARD
                                 : mod.getHighlanderGroupLoadOrders().getLast().getPriorityGroup();
+                        String text = grp == null ? "" : grp.toString();
+                        if (mod.getHighlanderGroupLoadOrders().size() > 1) {
+                            // return HTML to enable bold rendering in JTable
+                            return "<html><strong>" + text + "</strong></html>";
+                        }
+                        return text;
                     }
                 }),
                 new TableColumn<>("WOTC", Boolean.class, Mod::isRequiresXPACK, new Function<Boolean, String>() {
@@ -182,3 +188,4 @@ public class ModTableModel extends XTableModel<Mod> {
         fireTableDataChanged();
     }
 }
+

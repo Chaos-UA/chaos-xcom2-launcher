@@ -173,6 +173,11 @@ public class ModTable extends XTable {
                         && (hasIgnoredDeclaredDependency || getModService().hasDeclaredUserDependency(mod))) {
                     JLabel lbl = (JLabel) component;
                     lbl.setText("<html><strong>" + lbl.getText() + "</strong></html>");
+                } else if (adapter.column == 7) { // Highlander group column
+                    JLabel lbl = (JLabel) component;
+                    if (mod.getHighlanderGroupLoadOrders().isEmpty()) {
+                        lbl.setForeground(ColorConstant.getLabelDisabledForegroundColor());
+                    }
                 } else if (adapter.column == 8) { // STEAM MOD ID COLUMN
                     if (!Objects.equals(mod.getSteamModIdByDirName(), mod.getSteamDbModId())) {
                         JLabel lbl = (JLabel) component;
