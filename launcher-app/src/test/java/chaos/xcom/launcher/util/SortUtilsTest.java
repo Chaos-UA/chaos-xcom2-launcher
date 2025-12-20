@@ -383,7 +383,8 @@ class SortUtilsTest {
         int lastIndex = result.getSorted().size() - 1;
         assertEquals("gg2", result.getSorted().get(lastIndex - 2), toResolvedItemsString(result.getSorted()));
         assertEquals("gg1", result.getSorted().get(lastIndex - 1), toResolvedItemsString(result.getSorted()));
-        assertEquals("gg3", result.getSorted().get(lastIndex), toResolvedItemsString(result.getSorted()));    }
+        assertEquals("gg3", result.getSorted().get(lastIndex), toResolvedItemsString(result.getSorted()));
+    }
 
     private SortItem<String> item(String value, Set<String> before, Set<String> after) {
         SortItem<String> i = new SortItem<>();
