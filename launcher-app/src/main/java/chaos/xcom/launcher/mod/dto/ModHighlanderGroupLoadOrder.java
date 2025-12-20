@@ -9,7 +9,7 @@ public class ModHighlanderGroupLoadOrder {
     private String declaredInMod;
     private String overriddenByMod;
 
-    private boolean isActive() {
+    public boolean isActive() {
         return overriddenByMod == null;
     }
 }

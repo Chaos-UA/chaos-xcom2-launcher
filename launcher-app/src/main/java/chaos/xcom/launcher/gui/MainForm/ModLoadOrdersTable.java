@@ -49,15 +49,19 @@ public class ModLoadOrdersTable extends XTable {
                 ModService modService = getModService();
 
                 if (colIndex == MOD_ID_COLUMN_INDEX) {
-                    JCheckBox checkBox = (JCheckBox) component;
-                    String mod = row.getMod();
-                    checkBox.setHorizontalAlignment(SwingConstants.LEFT);
-                    checkBox.setSelected(getModService().isModActive(mod));
-                    checkBox.setText(mod);
-                    checkBox.setToolTipText(mod);
-                    if (!modService.isModExist(mod)) {
-                        checkBox.setEnabled(false);
-                        component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
+                    if (row.getMod() == null) { // highlander run priority group
+                        component = new JLabel(); // hide checkbox
+                    } else {
+                        JCheckBox checkBox = (JCheckBox) component;
+                        String mod = row.getMod();
+                        checkBox.setHorizontalAlignment(SwingConstants.LEFT);
+                        checkBox.setSelected(getModService().isModActive(mod));
+                        checkBox.setText(mod);
+                        checkBox.setToolTipText(mod);
+                        if (!modService.isModExist(mod)) {
+                            checkBox.setEnabled(false);
+                            component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
+                        }
                     }
                 } else if (colIndex == TARGET_MOD_ID_COLUMN_INDEX) {
                     JCheckBox checkBox = (JCheckBox) component;
@@ -187,7 +191,7 @@ public class ModLoadOrdersTable extends XTable {
                     row.setOverriddenByModId(loadOrder.getOverriddenByMod());
                     row.setRunOrderType(loadOrder.getPriorityGroup().name());
                     row.getSources().add(DeclarationSource.HIGHLANDER);
-                    row.setActive(row.isActive());
+                    row.setActive(loadOrder.isActive());
                     row.setHasError(false);
                     rows.add(row);
                 }
