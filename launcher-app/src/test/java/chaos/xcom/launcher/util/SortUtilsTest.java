@@ -1,12 +1,15 @@
 package chaos.xcom.launcher.util;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 import chaos.xcom.launcher.util.SortUtils.SortItem;
 import chaos.xcom.launcher.util.SortUtils.SortResult;
 import org.junit.jupiter.api.Test;
 
-import java.util.*;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 
 class SortUtilsTest {
@@ -285,39 +288,34 @@ class SortUtilsTest {
 
     @Test
     void testLargeCycleDoesNotDropNodes() {
-        Map<String, SortUtils.SortItem<String>> map = new LinkedHashMap<>();
+        List<SortUtils.SortItem<String>> items = List.of(
+                item("WOTCMoreSparkWeapons",
+                        Set.of(),
+                        Set.of("zzzWeaponSkinReplacer", "X2WOTCCommunityHighlander",
+                                "WOTCIridarTemplateMaster", "WepUpgradeFix")),
+                item("MECTroopersLWOTC",
+                        Set.of(),
+                        Set.of("WOTCStormriderClass", "ABBPerkPack",
+                                "WOTCMoreSparkWeapons", "ModJamLWOTC_M2")),
+                item("BuildableUnits",
+                        Set.of("WOTCRocketLaunchers"),
+                        Set.of("ABBPerkPack", "MECTroopersLWOTC")),
+                item("FullerOverrideBUAddOn",
+                        Set.of(),
+                        Set.of("BuildableUnits", "zzzWeaponSkinReplacer")),
+                item("ModJamLWOTC_M2",
+                        Set.of(),
+                        Set.of("WOTCMoreSparkWeapons", "X2WOTCCommunityHighlander")),
+                item("zzzWeaponSkinReplacer",
+                        Set.of(),
+                        Set.of("ModJamLWOTC_M2"))
+        );
 
-        map.put("WOTCMoreSparkWeapons", item("WOTCMoreSparkWeapons",
-                Set.of(),
-                Set.of("zzzWeaponSkinReplacer", "X2WOTCCommunityHighlander",
-                        "WOTCIridarTemplateMaster", "WepUpgradeFix")));
-
-        map.put("MECTroopersLWOTC", item("MECTroopersLWOTC",
-                Set.of(),
-                Set.of("WOTCStormriderClass", "ABBPerkPack",
-                        "WOTCMoreSparkWeapons", "ModJamLWOTC_M2")));
-
-        map.put("BuildableUnits", item("BuildableUnits",
-                Set.of("WOTCRocketLaunchers"),
-                Set.of("ABBPerkPack", "MECTroopersLWOTC")));
-
-        map.put("FullerOverrideBUAddOn", item("FullerOverrideBUAddOn",
-                Set.of(),
-                Set.of("BuildableUnits", "zzzWeaponSkinReplacer")));
-
-        map.put("ModJamLWOTC_M2", item("ModJamLWOTC_M2",
-                Set.of(),
-                Set.of("WOTCMoreSparkWeapons", "X2WOTCCommunityHighlander")));
-
-        map.put("zzzWeaponSkinReplacer", item("zzzWeaponSkinReplacer",
-                Set.of(),
-                Set.of("ModJamLWOTC_M2")));
-
-        SortUtils.SortResult<String> result = SortUtils.sort(map);
+        SortUtils.SortResult<String> result = SortUtils.sort(items);
 
         // 1️⃣ Nothing lost
-        assertEquals(map.size(), result.getSorted().size());
-        assertTrue(result.getSorted().containsAll(map.keySet()));
+        assertEquals(items.size(), result.getSorted().size());
+        assertTrue(result.getSorted().containsAll(List.of("WOTCMoreSparkWeapons", "MECTroopersLWOTC", "BuildableUnits", "FullerOverrideBUAddOn", "ModJamLWOTC_M2", "zzzWeaponSkinReplacer")));
 
         // 2️⃣ One cycle
         assertEquals(1, result.getCycles().size());
