@@ -42,7 +42,7 @@ public class MainForm extends JFrame {
 
     private ModTable tblModsList;
     private JPanel pnlRoot;
-    private final XImage pnlModImage = new XImage();
+    private final XImage pnlModImage = new XImage(ImageUtils.WOTC_ICON.getImage());
     private final LauncherService launcherService;
 
     private final ModDeclaredDependenciesTable tblDeclaredDependencies = new ModDeclaredDependenciesTable();
@@ -217,7 +217,7 @@ public class MainForm extends JFrame {
         pnlModInfo.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(),
                 "<html>Mod information" + (mod == null ? "" : String.format(" - <strong>%s (%s)</strong>", mod.getTitle(), mod.getId())) + "</html>"));
         if (mod == null) {
-            pnlModImage.setImage(ImageUtils.WOTC_ICON.getImage());
+            pnlModImage.setImage((Image) null);
             epXcomMod.setText(null);
             epSteamDescription.setText(null);
 
@@ -316,7 +316,6 @@ public class MainForm extends JFrame {
         final JScrollPane scrollPane1 = new JScrollPane();
         panel1.add(scrollPane1, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_WANT_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_WANT_GROW, null, null, null, 0, false));
         tblModsList = new ModTable();
-        tblModsList.putClientProperty("terminateEditOnFocusLost", Boolean.TRUE);
         scrollPane1.setViewportView(tblModsList);
         pnlModInfo = new JPanel();
         pnlModInfo.setLayout(new GridLayoutManager(1, 1, new Insets(0, 0, 0, 0), -1, -1));
@@ -325,9 +324,6 @@ public class MainForm extends JFrame {
         final FlatSplitPane flatSplitPane1 = new FlatSplitPane();
         flatSplitPane1.setResizeWeight(0.0);
         pnlModInfo.add(flatSplitPane1, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
-        pnlModImage.setMinimumSize(new Dimension(50, 10));
-        pnlModImage.setToolTipText("Some active mods have errors");
-        flatSplitPane1.setLeftComponent(pnlModImage);
         final JPanel panel2 = new JPanel();
         panel2.setLayout(new GridLayoutManager(1, 1, new Insets(0, 0, 0, 0), -1, -1));
         flatSplitPane1.setRightComponent(panel2);
@@ -363,6 +359,9 @@ public class MainForm extends JFrame {
         epXcomGameIni = new FlatEditorPane();
         epXcomGameIni.setEditable(false);
         spXcomGameIni.setViewportView(epXcomGameIni);
+        pnlModImage.setMinimumSize(new Dimension(50, 10));
+        pnlModImage.setToolTipText("Some active mods have errors");
+        flatSplitPane1.setLeftComponent(pnlModImage);
         final JPanel panel4 = new JPanel();
         panel4.setLayout(new GridLayoutManager(1, 1, new Insets(0, 0, 0, 0), -1, -1));
         splitPane1.setRightComponent(panel4);
