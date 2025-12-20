@@ -103,7 +103,7 @@ class SortUtilsTest {
 
         assertEquals(3, result.getSorted().size());
         // A must come before B
-        assertTrue(result.getSorted().indexOf("A") < result.getSorted().indexOf("B"));
+        assertBefore(result.getSorted(), "A", "B");
         // C can be anywhere
         assertTrue(result.getSorted().contains("C"));
         assertTrue(result.getCycles().isEmpty());
@@ -263,13 +263,13 @@ class SortUtilsTest {
         // 3️⃣ Ordering constraints
 
         // 1 must be before 2
-        assertTrue(sorted.indexOf("1") < sorted.indexOf("2"));
+        assertBefore(sorted, "1", "2");
 
         // 6 must be before 3 (depends on cycle)
-        assertTrue(sorted.indexOf("6") < sorted.indexOf("3"));
+        assertBefore(sorted, "6", "3");
 
         // 5 must be after 3 (depends on cycle)
-        assertTrue(sorted.indexOf("5") > sorted.indexOf("3"));
+        assertBefore(sorted, "3", "5");
 
         // Entire cycle must be between 6 and 5
         int minCycleIndex = cycle.stream()
@@ -288,7 +288,7 @@ class SortUtilsTest {
 
     @Test
     void testLargeCycleDoesNotDropNodes() {
-        List<SortUtils.SortItem<String>> items = List.of(
+        List<SortItem<String>> items = List.of(
                 item("WOTCMoreSparkWeapons",
                         Set.of(),
                         Set.of("zzzWeaponSkinReplacer", "X2WOTCCommunityHighlander",
@@ -311,7 +311,7 @@ class SortUtilsTest {
                         Set.of("ModJamLWOTC_M2"))
         );
 
-        SortUtils.SortResult<String> result = SortUtils.sort(items);
+        SortResult<String> result = SortUtils.sort(items);
 
         // 1️⃣ Nothing lost
         assertEquals(items.size(), result.getSorted().size());
@@ -339,12 +339,83 @@ class SortUtilsTest {
         );
     }
 
-    private SortUtils.SortItem<String> item(String value, Set<String> before, Set<String> after) {
-        SortUtils.SortItem<String> i = new SortUtils.SortItem<>();
+    @Test
+    void multipleItems_shouldKeepOrderIfNotDependOnAnything() {
+        // given
+        List<SortItem<String>> items = List.of(
+                item("2", Set.of(), Set.of()),
+                item("1", Set.of(), Set.of()),
+                item("3", Set.of(), Set.of()),
+                item("b2", Set.of("b1"), Set.of("b3", "b4")),
+                item("b3", Set.of(), Set.of()),
+                item("b1", Set.of(), Set.of()),
+                item("c", Set.of(), Set.of()),
+
+                item("a1", Set.of(), Set.of("a2")),
+                item("a2", Set.of(), Set.of()),
+                item("gg2", Set.of(), Set.of()),
+                item("gg1", Set.of(), Set.of()),
+                item("gg3", Set.of(), Set.of())
+        );
+
+        // when
+        SortResult<String> result = SortUtils.sort(items);
+
+        // then
+        assertEquals("2", result.getSorted().get(0), toResolvedItemsString(result.getSorted()));
+        assertEquals("1", result.getSorted().get(1), toResolvedItemsString(result.getSorted()));
+        assertEquals("3", result.getSorted().get(2), toResolvedItemsString(result.getSorted()));
+
+        assertEquals(items.size(), result.getSorted().size());
+        assertBefore(result.getSorted(), "b2", "b1");
+        assertBefore(result.getSorted(), "b3", "b2");
+
+        assertBefore(result.getSorted(), "b1", "c");
+        assertBefore(result.getSorted(), "b2", "c");
+        assertBefore(result.getSorted(), "b3", "c");
+
+        assertBefore(result.getSorted(), "c", "a1");
+        assertBefore(result.getSorted(), "c", "a2");
+        assertBefore(result.getSorted(), "c", "gg");
+
+        assertBefore(result.getSorted(), "a2", "a1");
+
+        int lastIndex = result.getSorted().size() - 1;
+        assertEquals("gg2", result.getSorted().get(lastIndex - 2), toResolvedItemsString(result.getSorted()));
+        assertEquals("gg1", result.getSorted().get(lastIndex - 1), toResolvedItemsString(result.getSorted()));
+        assertEquals("gg3", result.getSorted().get(lastIndex), toResolvedItemsString(result.getSorted()));    }
+
+    private SortItem<String> item(String value, Set<String> before, Set<String> after) {
+        SortItem<String> i = new SortItem<>();
         i.setValue(value);
         i.getBeforeValues().addAll(before);
         i.getAfterValues().addAll(after);
         return i;
     }
 
+    /**
+     * Assert that item1 comes before item2 in the sorted list.
+     * On failure, prints all sorted items with their indices for debugging.
+     */
+    private void assertBefore(List<String> sorted, String item1, String item2) {
+        int index1 = sorted.indexOf(item1);
+        int index2 = sorted.indexOf(item2);
+
+        if (index1 == -1 || index2 == -1 || index1 >= index2) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("\n❌ Assertion failed: '").append(item1).append("' should come before '").append(item2).append("'\n");
+            sb.append("   ").append(item1).append(" index: ").append(index1).append("\n");
+            sb.append("   ").append(item2).append(" index: ").append(index2).append("\n\n");
+            sb.append(toResolvedItemsString(sorted));
+        }
+    }
+
+    private String toResolvedItemsString(List<String> sorted) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Resolved items:\n");
+        for (int i = 0; i < sorted.size(); i++) {
+            sb.append("[").append(i).append("] ").append(sorted.get(i)).append("\n");
+        }
+        return sb.toString();
+    }
 }
