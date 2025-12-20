@@ -1,6 +1,5 @@
 package chaos.xcom.launcher.highlander;
 
-import chaos.xcom.launcher.db.property.DbProperties;
 import chaos.xcom.launcher.highlander.dto.HighlanderModConfig;
 import chaos.xcom.launcher.highlander.dto.HighlanderModConfig.RunOrderDeclaration;
 import chaos.xcom.launcher.highlander.dto.HighlanderModsConfig;
@@ -84,9 +83,9 @@ public class CommunityHighlanderUtils {
                                     }
                                     case "RunPriorityGroup" -> {
                                         try {
-                                            currentMod.setRunPriorityGroup(HighlanderRunPriorityGroup.parse(value));
+                                            currentMod.setRunPriorityGroup(HighlanderRunPriorityGroup.parseValueFromHighlanderXcomGameIni(value));
                                         } catch (IllegalArgumentException e) {
-                                            log.error("Failed to parse {} {} priority group {}", file, currentMod.getMod(), key, e);
+                                            log.error("Failed to parse {} {} priority group {}: {}", file, currentMod.getMod(), key, e.toString());
                                         }
                                     }
                                 }
@@ -110,17 +109,6 @@ public class CommunityHighlanderUtils {
         if (modsConfig.getDependenciesCount() > 0 || modsConfig.getRunOrderDependenciesCount() > 0) {
             modsConfig.getModConfigs().computeIfAbsent(mod, v -> new HighlanderModConfig(mod))
                     .getRequiredMods().add(COMMUNITY_HIGHLANDER_MOD_ID);
-        }
-
-        if (mod.equals(COMMUNITY_HIGHLANDER_MOD_ID) && DbProperties.get().isDLC2AlienHuntersInstalled()) {
-            modsConfig.getModConfigs().computeIfAbsent(mod, v -> new HighlanderModConfig(mod))
-                    .getRequiredMods().add(COMMUNITY_HIGHLANDER_DLC2_MOD_ID);
-        }
-
-        HighlanderModConfig rootModConfig = modsConfig.getModConfigs().get(mod);
-        if (rootModConfig != null && rootModConfig.getRunPriorityGroup() == null) {
-            // use standard as default
-            rootModConfig.setRunPriorityGroup(HighlanderRunPriorityGroup.RUN_STANDARD);
         }
 
         return modsConfig;

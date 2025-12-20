@@ -1,12 +1,8 @@
 package chaos.xcom.launcher.mod.dto;
 
 import chaos.xcom.launcher.highlander.dto.HighlanderModsConfig;
-import chaos.xcom.launcher.highlander.dto.HighlanderRunPriorityGroup;
-import chaos.xcom.launcher.mod.rule.UserRuleDeclaration;
 import chaos.xcom.launcher.steam.SteamMod;
-import chaos.xcom.launcher.util.SortUtils;
 import chaos.xcom.launcher.util.SortUtils.SortItem;
-import com.sun.source.tree.Tree;
 import lombok.AccessLevel;
 import lombok.Data;
 import lombok.Getter;
@@ -65,7 +61,6 @@ public class Mod {
     private List<CycleGroup> cycleMods = new ArrayList<>();
     private List<ModDependency> dependencies = new ArrayList<>();
     private List<ModHighlanderGroupLoadOrder> highlanderGroupLoadOrders = new ArrayList<>();
-    private List<ModLoadOrderGroupDeclaration> loadOrderGroups = new ArrayList<>();
     private List<ModLoadOrderDeclaration> loadOrders = new ArrayList<>();
 
     public void addDeclaredDependency(ModDeclaredDependency dependency) {
@@ -108,13 +103,6 @@ public class Mod {
                 dependencyType,
                 targetMod,
                 nonDownloadedSteamModId);
-    }
-
-    public void addLoadOrderGroupDeclaration(ModLoadOrderGroupDeclaration loadOrderGroupDeclaration) {
-        for (ModLoadOrderGroupDeclaration prevLoadOrder : loadOrderGroups) {
-            prevLoadOrder.setOverriddenByMod(loadOrderGroupDeclaration.getDeclaredInMod());
-        }
-        loadOrderGroups.add(loadOrderGroupDeclaration);
     }
 
     public void addIncomingLoadOrderDeclaration(ModLoadOrderDeclaration loadOrderDeclarationFromAnotherMod) {
@@ -163,9 +151,8 @@ public class Mod {
 
     public void addHighlanderGroupLoadOrder(ModHighlanderGroupLoadOrder groupLoadOrder) {
         for (ModHighlanderGroupLoadOrder prev : highlanderGroupLoadOrders) {
-            if (prev.getOverriddenByMod() != null) {
+            if (prev.getOverriddenByMod() == null) {
                 prev.setOverriddenByMod(groupLoadOrder.getDeclaredInMod());
-                prev.setActive(false);
             }
         }
         highlanderGroupLoadOrders.add(groupLoadOrder);
@@ -197,7 +184,6 @@ public class Mod {
         cycleMods = new ArrayList<>();
         dependencies = new ArrayList<>();
         loadOrders = new ArrayList<>();
-        loadOrderGroups = new ArrayList<>();
     }
 
     public boolean isExist() {
@@ -226,14 +212,6 @@ public class Mod {
 
     public String getStatusAsString() {
         return this.statuses.stream().map(Enum::toString).collect(Collectors.joining(", "));
-    }
-
-    @Data
-    public static class ModLoadOrderGroupDeclaration {
-        private HighlanderRunPriorityGroup modLoadOrderGroup;
-        private String targetMod;
-        private String declaredInMod;
-        private String overriddenByMod;
     }
 
     @Data

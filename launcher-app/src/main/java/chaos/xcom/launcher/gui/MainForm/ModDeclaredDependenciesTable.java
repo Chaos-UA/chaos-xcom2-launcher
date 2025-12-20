@@ -49,7 +49,7 @@ public class ModDeclaredDependenciesTable extends XTable {
                     return;
                 }
                 JPopupMenu menu = new JPopupMenu();
-                JMenuItem editUserModRules = new JMenuItem("Edit mod rules");
+                JMenuItem editUserModRules = new JMenuItem("Edit user mod rules");
                 editUserModRules.addActionListener(ae -> {
                     ModService.get().openUserModRulesEditorDialog(mod);
                 });

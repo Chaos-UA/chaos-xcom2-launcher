@@ -434,7 +434,7 @@ public class ModService {
         fillSteamMods(allMods);
         resetModsDeclaredDependencies(allMods);
 
-        LinkedHashMap<String, Mod> loadOrderSortedMods = sortModsForLoadOrder(allMods.values());
+        LinkedHashMap<String, Mod> loadOrderSortedMods = sortModsForLoadOrder(new ArrayList<>(allMods.values()));
 
         this.allMods = loadOrderSortedMods;
         calculateModsStatuses();
@@ -643,115 +643,78 @@ public class ModService {
         return true;
     }
 
-    LinkedHashMap<String, Mod> sortModsForLoadOrder(Collection<Mod> inputMods) {
-        List<Mod> mods = new ArrayList<>(inputMods);
-        mods.sort(Comparator.comparing(mod -> mod.getId().toLowerCase()));
+    LinkedHashMap<String, Mod> preSortModsByHighlanderConfig(LinkedHashMap<String, Mod> inputMods) {
+        // presort as is
+        prepareFinalDependenciesAndLoadOrders(inputMods);
+        resetAndFillModsLoadOrderGroupsFromHighlanderConfigs(inputMods);
 
-        //Set<String> ignoreRequiredModIds =;// mods.stream().map(v -> ).collect(Collectors.toSet());
-
-        // first use only declared dependencies directly in mod without meta mods enhanced dependencies
+        // prepare isolated groups
         TreeMap<HighlanderRunPriorityGroup, List<Mod>> groupsMap = new TreeMap<>();
-        for (Mod mod : mods) {
-            HighlanderModConfig config = mod.getHighlanderModsConfig().getModConfigs().get(mod.getId());
-            HighlanderRunPriorityGroup runPriorityGroup = config == null
-                    ? HighlanderRunPriorityGroup.RUN_STANDARD
-                    : config.getRunPriorityGroup();
-            groupsMap.computeIfAbsent(runPriorityGroup, k -> new ArrayList<>()).add(mod);
+        for (Mod mod : inputMods.values()) {
+            HighlanderRunPriorityGroup priorityGroup = mod.getHighlanderGroupLoadOrders().isEmpty()
+                    ? HighlanderRunPriorityGroup.STANDARD
+                    : mod.getHighlanderGroupLoadOrders().getLast().getPriorityGroup();
+            groupsMap.computeIfAbsent(priorityGroup, k -> new ArrayList<>()).add(mod);
         }
 
-        for (Map.Entry<HighlanderRunPriorityGroup, List<Mod>> entry : groupsMap.entrySet()) {
-            List<Mod> rootSortedMods = sortModsByDeclaredHighlanderConfigOnly(toLinkedHashMap(entry.getValue()));
-            entry.setValue(rootSortedMods);
-        }
-
-        mods = groupsMap.values().stream().flatMap(Collection::stream).collect(Collectors.toList());
-//        for (int i = 0; i < mods.size(); i++) {
-//            Mod mod = mods.get(i);
-//            for (ModDeclaredDependency declaredDependency : mod.getDeclaredDependencies()) {
-//                if (declaredDependency.getTargetMod() == null || declaredDependency.getDependencyType() != DependencyType.REQUIRED) {
-//                    continue;
-//                }
-//                appendLoadAfterRequiredMods(mod, declaredDependency.getTargetMod(), mod.getId(),
-//                        requiredModIgnoredByAlternativeModsMap);
-//            }
-//
-//            for (int j = i; j < mods.size(); j++) {
-//                Mod laterMod = mods.get(j);
-//                boolean isCurrentMod = i == j;
-//                HighlanderModConfig modConfig = laterMod.getHighlanderModsConfig().getModConfigs().get(mod.getId());
-//                if (modConfig != null) { // later mod may override previous mod
-//                    if (modConfig.getRunPriorityGroup() != null) {
-//                        ModLoadOrderGroupDeclaration loadOrderDeclaration = new ModLoadOrderGroupDeclaration();
-//                        loadOrderDeclaration.setDeclaredInMod(laterMod.getId());
-//                        loadOrderDeclaration.setModLoadOrderGroup(modConfig.getRunPriorityGroup());
-//                        loadOrderDeclaration.setTargetMod(mod.getId());
-//                        mod.addLoadOrderGroupDeclaration(loadOrderDeclaration);
-//                    }
-//
-//                    if (!isCurrentMod) {
-//                        for (String requiredMod : modConfig.getRequiredMods()) {
-//                            ModLoadOrderDeclaration loadOrderDeclaration = new ModLoadOrderDeclaration();
-//                            loadOrderDeclaration.setMod(mod.getId());
-//                            loadOrderDeclaration.setDeclaredInMod(laterMod.getId());
-//                            loadOrderDeclaration.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
-//                            loadOrderDeclaration.setTargetMod(requiredMod);
-//                            mod.addLoadOrderDeclaration(loadOrderDeclaration);
-//
-//                            LinkedHashSet<String> requiredModIgnoredByMods = requiredModIgnoredByAlternativeModsMap.getOrDefault(requiredMod, new LinkedHashSet<>());
-//                            for (String requiredModIgnoredByMod : requiredModIgnoredByMods) {
-//                                if (loadOrderDeclaration.getOverriddenByMod() == null) {
-//                                    loadOrderDeclaration.setOverriddenByMod(requiredModIgnoredByMod);
-//                                }
-//                                ModLoadOrderDeclaration loadOrder2 = new ModLoadOrderDeclaration();
-//                                loadOrder2.setMod(mod.getId());
-//                                loadOrder2.setDeclaredInMod(laterMod.getId());
-//                                loadOrder2.setModLoadOrder(ModLoadOrder.LOAD_AFTER_REQUIRED);
-//                                loadOrder2.setTargetMod(requiredModIgnoredByMod);
-//                                mod.addLoadOrderDeclaration(loadOrder2);
-//                            }
-//                        }
-//                    }
-//                    for (RunOrderDeclaration runOrder : modConfig.getRunOrderDeclarations()) {
-//                        ModLoadOrderDeclaration loadOrderDeclaration = new ModLoadOrderDeclaration();
-//                        loadOrderDeclaration.setMod(mod.getId());
-//                        loadOrderDeclaration.setDeclaredInMod(laterMod.getId());
-//                        loadOrderDeclaration.setModLoadOrder(runOrder.getModLoadOrder());
-//                        loadOrderDeclaration.setTargetMod(runOrder.getTargetMod());
-//                        mod.addLoadOrderDeclaration(loadOrderDeclaration);
-//                    }
-//                }
-//            }
-//        }
-        // todo prepareFinalDependenciesAndLoadOrders remove above?
-        groupsMap = new TreeMap<>();
-        for (Mod mod : mods) {
-            HighlanderModConfig config = mod.getHighlanderModsConfig().getModConfigs().get(mod.getId());
-            HighlanderRunPriorityGroup runPriorityGroup = config == null
-                    ? HighlanderRunPriorityGroup.RUN_STANDARD
-                    : config.getRunPriorityGroup();
-            groupsMap.computeIfAbsent(runPriorityGroup, k -> new ArrayList<>()).add(mod);
-        }
-
-        // sort by using isolated RunPriorityGroups
-        // todo delete
-        LinkedHashMap<String, Mod> modsMap = toLinkedHashMap(mods);
-        prepareFinalDependenciesAndLoadOrders(modsMap);
+        // sort inside groups
+        LinkedHashMap<String, Mod> result = new LinkedHashMap<>(inputMods.size());
         for (Map.Entry<HighlanderRunPriorityGroup, List<Mod>> entry : groupsMap.entrySet()) {
             List<Mod> preSortedMods = sortModsAfterPreSort(toLinkedHashMap(entry.getValue()), false);
-            entry.setValue(preSortedMods);
+            for (Mod mod : preSortedMods) {
+                result.put(mod.getId(), mod);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * The idea to first sort by Highlander priority groups if possible.
+     */
+    void resetAndFillModsLoadOrderGroupsFromHighlanderConfigs(LinkedHashMap<String, Mod> mods) {
+        // 1 fill self-declared load order groups
+        for (Mod mod : mods.values()) {
+            mod.setHighlanderGroupLoadOrders(new ArrayList<>()); // reset
+
+            HighlanderModConfig config = mod.getHighlanderModsConfig().getModConfigs().get(mod.getId());
+            if (config != null && config.getRunPriorityGroup() != null) {
+                ModHighlanderGroupLoadOrder groupLoadOrder = new ModHighlanderGroupLoadOrder();
+                groupLoadOrder.setPriorityGroup(config.getRunPriorityGroup());
+                groupLoadOrder.setDeclaredInMod(mod.getId());
+                mod.addHighlanderGroupLoadOrder(groupLoadOrder);
+            }
         }
 
-        mods = groupsMap.values().stream().flatMap(Collection::stream).toList();
-        // now sort by using only before/after/required/ignoreRequired and ignore groups on already sorted by groups
-        modsMap = toLinkedHashMap(mods);
-        prepareFinalDependenciesAndLoadOrders(modsMap);
+        // 2 fill incoming declared load order groups from other mods
+        for (Mod mod : mods.values()) {
+            for (HighlanderModConfig config : mod.getHighlanderModsConfig().getModConfigs().values()) {
+                if (config.getRunPriorityGroup() != null) {
+                    Mod targetMod = mods.get(config.getMod());
+                    if (targetMod != null && targetMod != mod) {
+                        ModHighlanderGroupLoadOrder groupLoadOrder = new ModHighlanderGroupLoadOrder();
+                        groupLoadOrder.setPriorityGroup(config.getRunPriorityGroup());
+                        groupLoadOrder.setDeclaredInMod(mod.getId());
+                        targetMod.addHighlanderGroupLoadOrder(groupLoadOrder);
+                    }
+                }
+            }
+        }
+    }
 
-        mods = sortModsAfterPreSort(toLinkedHashMap(mods), true);
+    LinkedHashMap<String, Mod> sortModsForLoadOrder(ArrayList<Mod> inputMods) {
+        inputMods.sort(Comparator.comparing(mod -> mod.getId().toLowerCase()));
+
+        LinkedHashMap<String, Mod> modsMap = toLinkedHashMap(inputMods);
+        modsMap = preSortModsByHighlanderConfig(modsMap);
+
+        prepareFinalDependenciesAndLoadOrders(modsMap);
+        modsMap = toLinkedHashMap(sortModsAfterPreSort(modsMap, true));
+        resetAndFillModsLoadOrderGroupsFromHighlanderConfigs(modsMap);
 
         List<Mod> inactiveMods = new ArrayList<>();
         LinkedHashMap<String, Mod> result = new LinkedHashMap<>();
         int activeModCounter = 1;
-        for (Mod mod : mods) {
+        for (Mod mod : modsMap.values()) {
             if (mod.isActive()) {
                 mod.setLoadOrder(activeModCounter++);
                 result.put(mod.getId(), mod);
@@ -791,10 +754,10 @@ public class ModService {
         }
 
         // 3 fill incoming dependencies from other mods
-        fillModsFieldsAfterLoadOrderSort(mods);
+        fillIncomingDependenciesFromOtherMods(mods);
     }
 
-    void fillModsFieldsAfterLoadOrderSort(LinkedHashMap<String, Mod> modsMap) {
+    void fillIncomingDependenciesFromOtherMods(LinkedHashMap<String, Mod> modsMap) {
 
         // fill incoming load order rules
         for (Mod mod : modsMap.values()) {
@@ -852,14 +815,6 @@ public class ModService {
             HighlanderModConfig modConfig = anotherMod.getHighlanderModsConfig().getModConfigs().get(mod.getId());
             if (modConfig == null) {
                 continue;
-            }
-            if (modConfig.getRunPriorityGroup() != null) {
-                ModHighlanderGroupLoadOrder groupLoadOrder = new ModHighlanderGroupLoadOrder();
-                groupLoadOrder.setMod(mod.getId());
-                groupLoadOrder.setPriorityGroup(modConfig.getRunPriorityGroup());
-                groupLoadOrder.setDeclaredInMod(anotherMod.getId());
-                groupLoadOrder.setActive(mod.isActive() && anotherMod.isActive()); // both must be active for group
-                mod.addHighlanderGroupLoadOrder(groupLoadOrder);
             }
 
             for (String requiredMod : modConfig.getRequiredMods()) {
@@ -1267,6 +1222,17 @@ public class ModService {
             }
             File xcomGameIniFile = new File(modFile.getParentFile().getAbsolutePath() + "/Config/XComGame.ini");
             mod.setHighlanderModsConfig(CommunityHighlanderUtils.parseHighlanderXComGameIni(mod.getId(), xcomGameIniFile));
+            Map<String, HighlanderModConfig> modsConfig = mod.getHighlanderModsConfig().getModConfigs();
+            if (mod.getId().equals(CommunityHighlanderUtils.COMMUNITY_HIGHLANDER_MOD_ID)) {
+                HighlanderModConfig config = modsConfig.computeIfAbsent(mod.getId(), v -> new HighlanderModConfig(mod.getId()));
+                if (dbProps.isDLC2AlienHuntersInstalled()) {
+                    config.getRequiredMods().add(CommunityHighlanderUtils.COMMUNITY_HIGHLANDER_DLC2_MOD_ID);
+                }
+                config.setRunPriorityGroup(HighlanderRunPriorityGroup.FIRST);
+            } else if (mod.getId().equals(CommunityHighlanderUtils.COMMUNITY_HIGHLANDER_DLC2_MOD_ID)) {
+                HighlanderModConfig config = modsConfig.computeIfAbsent(mod.getId(), v -> new HighlanderModConfig(mod.getId()));
+                config.setRunPriorityGroup(HighlanderRunPriorityGroup.FIRST);
+            }
             return mod;
         } catch (Exception e) {
             log.error("Error while reading mod file {}", modFile.getAbsolutePath(), e);

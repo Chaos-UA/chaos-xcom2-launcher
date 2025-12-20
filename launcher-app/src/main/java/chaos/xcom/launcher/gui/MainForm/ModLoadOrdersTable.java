@@ -8,6 +8,7 @@ import chaos.xcom.launcher.mod.ModService;
 import chaos.xcom.launcher.mod.dto.DeclarationSource;
 import chaos.xcom.launcher.mod.dto.Mod;
 import chaos.xcom.launcher.mod.dto.Mod.ModLoadOrderDeclaration;
+import chaos.xcom.launcher.mod.dto.ModHighlanderGroupLoadOrder;
 import chaos.xcom.launcher.util.ColorConstant;
 import jakarta.enterprise.inject.spi.CDI;
 import lombok.Data;
@@ -100,7 +101,7 @@ public class ModLoadOrdersTable extends XTable {
                     return;
                 }
                 JPopupMenu menu = new JPopupMenu();
-                JMenuItem editUserModRules = new JMenuItem("Edit mod rules");
+                JMenuItem editUserModRules = new JMenuItem("Edit user mod rules");
                 editUserModRules.addActionListener(ae -> {
                     getModService().openUserModRulesEditorDialog(mod);
                 });
@@ -179,14 +180,14 @@ public class ModLoadOrdersTable extends XTable {
                 rows = new ArrayList<>();
             } else {
                 rows = new ArrayList<>();
-                for (Mod.ModLoadOrderGroupDeclaration loadOrder : mod.getLoadOrderGroups()) {
+                for (ModHighlanderGroupLoadOrder loadOrder : mod.getHighlanderGroupLoadOrders()) {
                     ModRunOrderTableRow row = new ModRunOrderTableRow();
-                    row.setTargetMod(loadOrder.getTargetMod());
+                    row.setTargetMod(mod.getId());
                     row.setDeclaredInModId(loadOrder.getDeclaredInMod());
                     row.setOverriddenByModId(loadOrder.getOverriddenByMod());
-                    row.setRunOrderType(loadOrder.getModLoadOrderGroup().name());
+                    row.setRunOrderType(loadOrder.getPriorityGroup().name());
                     row.getSources().add(DeclarationSource.HIGHLANDER);
-                    row.setActive(row.getOverriddenByModId() == null);
+                    row.setActive(row.isActive());
                     row.setHasError(false);
                     rows.add(row);
                 }

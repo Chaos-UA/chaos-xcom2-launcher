@@ -9,7 +9,6 @@ import chaos.xcom.launcher.highlander.dto.HighlanderModConfig.RunOrderDeclaratio
 import chaos.xcom.launcher.mod.ModService;
 import chaos.xcom.launcher.mod.dto.DeclarationSource;
 import chaos.xcom.launcher.mod.dto.Mod;
-import chaos.xcom.launcher.mod.dto.ModDeclaredDependency;
 import chaos.xcom.launcher.mod.dto.ModLoadOrder;
 import chaos.xcom.launcher.mod.rule.UserRuleDeclaration;
 import lombok.Data;
@@ -21,8 +20,6 @@ import java.awt.event.MouseEvent;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
 
 @Slf4j
 public class ModDeclaredRunOrdersTable extends XTable {
@@ -47,7 +44,7 @@ public class ModDeclaredRunOrdersTable extends XTable {
                     return;
                 }
                 JPopupMenu menu = new JPopupMenu();
-                JMenuItem editUserModRules = new JMenuItem("Edit mod rules");
+                JMenuItem editUserModRules = new JMenuItem("Edit user mod rules");
                 editUserModRules.addActionListener(ae -> {
                     ModService.get().openUserModRulesEditorDialog(mod);
                 });

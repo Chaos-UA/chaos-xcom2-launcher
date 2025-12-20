@@ -21,14 +21,29 @@ public enum HighlanderRunPriorityGroup {
     /**
      * Mods with this priority group execute their X2DLCInfo methods before mods from RUN_STANDARD.
      */
-    RUN_FIRST,
-    RUN_STANDARD,
+    FIRST("RUN_FIRST"),
+    STANDARD("RUN_STANDARD"),
     /**
      * Execute their methods after both of the other Priority Groups
      */
-    RUN_LAST;
+    LAST("RUN_LAST");
+
+    private final String xcomGameIniValue;
+
+    HighlanderRunPriorityGroup(String xcomGameIniValue) {
+        this.xcomGameIniValue = xcomGameIniValue;
+    }
 
     public static HighlanderRunPriorityGroup parse(String value) {
         return valueOf(value.trim().toUpperCase());
+    }
+
+    public static HighlanderRunPriorityGroup parseValueFromHighlanderXcomGameIni(String value) {
+        for (HighlanderRunPriorityGroup group : values()) {
+            if (group.xcomGameIniValue.equalsIgnoreCase(value.trim())) {
+                return group;
+            }
+        }
+        throw new IllegalArgumentException("Invalid Highlander Run Priority Group: " + value);
     }
 }

@@ -91,7 +91,7 @@ public class ModTable extends XTable {
                     menu.add(changeSteamModIdItem);
 
                     menu.addSeparator();
-                    JMenuItem editUserModRules = new JMenuItem("Edit mod rules");
+                    JMenuItem editUserModRules = new JMenuItem("Edit user mod rules");
                     editUserModRules.addActionListener(ae -> {
                         getModService().openUserModRulesEditorDialog(mod);
                     });

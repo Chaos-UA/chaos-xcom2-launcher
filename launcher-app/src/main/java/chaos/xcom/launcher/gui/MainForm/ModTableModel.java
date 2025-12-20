@@ -1,8 +1,8 @@
 package chaos.xcom.launcher.gui.MainForm;
 
 import chaos.xcom.launcher.gui.component.TableColumn;
-import chaos.xcom.launcher.gui.component.XTable;
 import chaos.xcom.launcher.gui.component.event.XTableModel;
+import chaos.xcom.launcher.highlander.dto.HighlanderRunPriorityGroup;
 import chaos.xcom.launcher.mod.ModService;
 import chaos.xcom.launcher.mod.dto.Mod;
 import chaos.xcom.launcher.util.ComparatorUtils;
@@ -14,10 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
 import javax.swing.*;
-import javax.swing.table.AbstractTableModel;
-import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableRowSorter;
-import java.awt.*;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
@@ -47,7 +44,7 @@ public class ModTableModel extends XTableModel<Mod> {
                     public Integer apply(Mod mod) {
                         return mod.getLoadOrders().size()
                                 + mod.getDependencies().size()
-                                + mod.getLoadOrderGroups().size();
+                                + mod.getHighlanderGroupLoadOrders().size();
                     }
                 }),
                 new TableColumn<>("Declared Dependencies", Integer.class, new Function<Mod, Integer>() {
@@ -55,6 +52,14 @@ public class ModTableModel extends XTableModel<Mod> {
                     public Integer apply(Mod mod) {
                         return mod.getDeclaredDependencies().size() + mod.getDeclaredLoadOrders().size()
                                 + ModService.get().getDeclaredUserDependenciesSize(mod);
+                    }
+                }),
+                new TableColumn<>("Highlander Group", HighlanderRunPriorityGroup.class, new Function<Mod, HighlanderRunPriorityGroup>() {
+                    @Override
+                    public HighlanderRunPriorityGroup apply(Mod mod) {
+                        return mod.getHighlanderGroupLoadOrders().isEmpty()
+                                ? HighlanderRunPriorityGroup.STANDARD
+                                : mod.getHighlanderGroupLoadOrders().getLast().getPriorityGroup();
                     }
                 }),
                 new TableColumn<>("WOTC", Boolean.class, Mod::isRequiresXPACK, new Function<Boolean, String>() {
@@ -86,7 +91,7 @@ public class ModTableModel extends XTableModel<Mod> {
     }
 
     public void setModFilter(String modFilterInput) {
-        this.modFilter = StringUtils.stripToEmpty(modFilterInput).toLowerCase();
+        this.modFilter = StringUtils.stripToEmpty(modFilterInput).toLowerCase().replaceAll(" ", "");
         if (modFilter.isEmpty()) {
             rowSorter.setRowFilter(null);
         } else {
@@ -97,8 +102,8 @@ public class ModTableModel extends XTableModel<Mod> {
                         return false;
                     }
                     Mod mod = getModByRawIndex(entry.getIdentifier());
-                    return mod.getId().toLowerCase().contains(modFilter)
-                            || mod.getTitle().toLowerCase().contains(modFilter);
+                    return mod.getId().toLowerCase().replaceAll(" ", "").contains(modFilter)
+                            || mod.getTitle().toLowerCase().replaceAll(" ", "").contains(modFilter);
                 }
             });
         }
