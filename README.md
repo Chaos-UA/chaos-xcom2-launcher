@@ -1,62 +1,35 @@
-# chaos-xcom-launcher
+# Chaos XCOM 2 Launcher
 
-This project uses Quarkus, the Supersonic Subatomic Java Framework.
+This is cross-platform Java launcher for XCOM 2 (WotC) focused on managing mods, resolving mod load order and visualizing dependency errors.
 
-If you want to learn more about Quarkus, please visit its website: <https://quarkus.io/>.
+The launcher guarantee mods load order as it is shown in order column.
 
-## Running the application in dev mode
+This launcher helps you to:
+- Automatically resolve mod load order using declared dependencies (Steam, X2WOTCCommunityHighlander, and user rules).
+- Specify manual mod load order and save it.
+- Show dependency problems (missing required mods, incompatible mods, cycles and more) and allow to resolve issues.
+- Inspect mod metadata and XComGame.ini (when present).
+- Read steam mod descriptions and other metadata.
+- Launch XCOM 2 with the prepared mods.
 
-You can run your application in dev mode that enables live coding using:
+The launcher is written in Java, so it runs on Windows and Linux.
+* On Windows the launcher runs best.
+* On Linux works, but play button don't work. Steam now uses Proton to run XCOM 2, thus play button in launcher is not working, but when play button is pressed the launcher will prepare mods and game config files well. After that you just need to start the game from the Steam (or in another way) without its native mod launcher to use prepared mods config.
 
-```shell script
-./mvnw quarkus:dev
-```
+Screenshots
+-----------
+There are three UI screenshots bundled in the `assets/` directory (replace the filenames below with the actual ones if they differ):
+![launcher-main-window.png](assets/img/launcher-main-window.png)
+![settings-window.png](assets/img/settings-window.png)
+![user_dependency_rule.png](assets/img/user_dependency_rule.png)
 
-> **_NOTE:_**  Quarkus now ships with a Dev UI, which is available in dev mode only at <http://localhost:8080/q/dev/>.
+Using the launcher
+------------------
+- Point the launcher to your XCOM 2 executable under Settings → Directories.
+- Add one or more directories where your mods are located (these can be Steam workshop folders or local mod folders).
+- Click "Reload mods" (or restart) to parse and load all mods.
+- The main mods table shows mod title, ID, active/inactive status, load order, errors and more.
+- Use the dependency and load order tabs to inspect why a mod is flagged with error and try to resolve load order manually for such mods.
+- Note, the launcher don't handle duplicated mods, if duplicate is present it will allow to use only first mod with such ID.
 
-## Packaging and running the application
-
-The application can be packaged using:
-
-```shell script
-./mvnw package
-```
-
-It produces the `quarkus-run.jar` file in the `target/quarkus-app/` directory.
-Be aware that it’s not an _über-jar_ as the dependencies are copied into the `target/quarkus-app/lib/` directory.
-
-The application is now runnable using `java -jar target/quarkus-app/quarkus-run.jar`.
-
-If you want to build an _über-jar_, execute the following command:
-
-```shell script
-./mvnw package -Dquarkus.package.jar.type=uber-jar
-```
-
-The application, packaged as an _über-jar_, is now runnable using `java -jar target/*-runner.jar`.
-
-## Creating a native executable
-
-You can create a native executable using:
-
-```shell script
-./mvnw package -Dnative
-```
-
-Or, if you don't have GraalVM installed, you can run the native executable build in a container using:
-
-```shell script
-./mvnw package -Dnative -Dquarkus.native.container-build=true
-```
-
-You can then execute your native executable with: `./target/chaos-xcom-launcher-1.0.0-SNAPSHOT-runner`
-
-If you want to learn more about building native executables, please consult <https://quarkus.io/guides/maven-tooling>.
-
-## Provided Code
-
-### REST
-
-Easily start your REST Web Services
-
-[Related guide section...](https://quarkus.io/guides/getting-started-reactive#reactive-jax-rs-resources)
+Enjoy XCOM 2!
