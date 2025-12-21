@@ -18,7 +18,6 @@ The launcher is written in Java, so it runs on Windows and Linux.
 
 Screenshots
 -----------
-There are three UI screenshots bundled in the `assets/` directory (replace the filenames below with the actual ones if they differ):
 ![launcher-main-window.png](assets/img/launcher-main-window.png)
 ![settings-window.png](assets/img/settings-window.png)
 ![user_dependency_rule.png](assets/img/user_dependency_rule.png)
