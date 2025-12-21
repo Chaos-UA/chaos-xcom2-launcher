@@ -90,6 +90,7 @@ public class ModDeclaredDependenciesTable extends XTable {
             @Override
             protected Component doHighlight(Component component, ComponentAdapter adapter) {
                 ModDeclaredDependency row = model.getRows().get(convertRowIndexToModel(adapter.row));
+                int colIndex = convertColumnIndexToModel(adapter.column);
                 if (row == null) {
                     return component;
                 }
@@ -101,9 +102,9 @@ public class ModDeclaredDependenciesTable extends XTable {
                 if (row.isHasError()) {
                     component.setBackground(ColorConstant.ERROR);
                 }
-                if (row.getTargetMod() == null && adapter.column == TARGET_MOD_ID_COLUMN_INDEX) {
+                if (row.getTargetMod() == null && colIndex == TARGET_MOD_ID_COLUMN_INDEX) {
                     component.setForeground(ColorConstant.getLabelDisabledForegroundColor());
-                } else if (adapter.column == IGNORE_COLUMN_INDEX) {
+                } else if (colIndex == IGNORE_COLUMN_INDEX) {
                     JCheckBox checkBox = (JCheckBox) component;
                     checkBox.setEnabled(row.getDependencyType() != DependencyType.REPLACED);
                 }

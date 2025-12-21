@@ -27,7 +27,7 @@ public class DbProperties extends AbstractProperties {
     public final StringProperty guiSkin = requiredStringProp("guiSkin", FlatIntelliJLaf.class.getName(), "GUI skin");
     public final ListProperty<String> gameLaunchArgs = listProp("gameLaunchArgs", new TypeReference<>() {},
             List.of("-allowconsole","-noRedscreens","-review"), "XCOM launch arguments");
-    public final BooleanProperty exitOnGameLaunch = booleanProp("exitOnGameLaunch", true, "Exit on XCOM game launch to free RAM memory resources");
+    public final BooleanProperty exitOnGameLaunch = booleanProp("exitOnGameLaunch", false, "Exit on XCOM game launch to free RAM memory resources");
     public final BooleanProperty syncMissingSteamModsOnReload = booleanProp("syncMissingSteamModsOnReload", true,
             "Sync missing Steam mods on mods reload");
     /**

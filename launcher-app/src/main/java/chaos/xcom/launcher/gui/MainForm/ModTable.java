@@ -22,10 +22,13 @@ import java.util.List;
 import java.util.Objects;
 
 public class ModTable extends XTable {
+    private final ModTableModel model;
 
     public ModTable() {
         super(new ModTableModel(List.of()));
         this.setModel(new ModTableModel(List.of()));
+        this.model = this.getModel();
+
         getModel().apply(this);
 
         addMouseListener(new XMouseAdapter() {
@@ -140,6 +143,7 @@ public class ModTable extends XTable {
             @Override
             protected Component doHighlight(Component component, ComponentAdapter adapter) {
                 Mod mod = getModel().getModByRawIndex(convertRowIndexToModel(adapter.row));
+                int colIndex = convertColumnIndexToModel(adapter.column);
                 if (mod == null) {
                     return component;
                 }
@@ -165,20 +169,20 @@ public class ModTable extends XTable {
                         .anyMatch(ModDependency::isIgnored);
                 boolean hasUserFinalDependency = mod.getDependencies().stream()
                         .anyMatch(v -> v.getSources().contains(DeclarationSource.USER));
-                if (adapter.column == 5 // Final dependencies
+                if (colIndex == model.getColumnIndex(model.DEPENDENCIES_COLUMN) // Final dependencies
                         && (hasIgnoredFinalDependency || hasUserFinalDependency)) {
                     JLabel lbl = (JLabel) component;
                     lbl.setText("<html><strong>" + lbl.getText() + "</strong></html>");
-                } else if (adapter.column == 6  // Declared dependencies
+                } else if (colIndex == model.getColumnIndex(model.DECLARED_DEPENDENCIES_COLUMN)  // Declared dependencies
                         && (hasIgnoredDeclaredDependency || getModService().hasDeclaredUserDependency(mod))) {
                     JLabel lbl = (JLabel) component;
                     lbl.setText("<html><strong>" + lbl.getText() + "</strong></html>");
-                } else if (adapter.column == 7) { // Highlander group column
+                } else if (colIndex == model.getColumnIndex(model.HIGHLANDER_GROUPS_COLUMN)) { // Highlander group column
                     JLabel lbl = (JLabel) component;
                     if (mod.getHighlanderGroupLoadOrders().isEmpty()) {
                         lbl.setForeground(ColorConstant.getLabelDisabledForegroundColor());
                     }
-                } else if (adapter.column == 8) { // STEAM MOD ID COLUMN
+                } else if (colIndex == model.getColumnIndex(model.STEAM_ID_COLUMN)) { // STEAM MOD ID COLUMN
                     if (!Objects.equals(mod.getSteamModIdByDirName(), mod.getSteamDbModId())) {
                         JLabel lbl = (JLabel) component;
                         lbl.setText("<html><strong>" + lbl.getText() + "</strong></html>");

@@ -1,7 +1,8 @@
 
 
 ## Assemble low size JRE:
---add-modules java.desktop,java.sql,jdk.zipfs,jdk.unsupported,java.rmi,java.security.jgss --strip-debug --no-header-files --no-man-pages --compress=2 --output target\jre
+C:\Users\Ukrai\.jdks\jbr-25\bin\jlink --add-modules java.desktop,java.sql,jdk.zipfs,jdk.unsupported,java.rmi,java.security.jgss --strip-debug --no-header-files --no-man-pages --compress=2 --output D:\projects\chaos-xcom-launcher\jlink\win
+
 
 ## native image:
 export JAVA_HOME=/path/to/graalvm
@@ -12,4 +13,5 @@ java -Djava.awt.headless=false -agentlib:native-image-agent=config-merge-dir=D:\
 
 
 ## flags to use?
--Xmx300m -XX:JbrShrinkingGcMaxHeapFreeRatio=10 -XX:+IgnoreUnrecognizedVMOptions sun.java2d.metal=true -XX:+UseCompressedOops
+java -Xmx300m -XX:JbrShrinkingGcMaxHeapFreeRatio=20 -XX:+IgnoreUnrecognizedVMOptions -XX:+UseCompressedOops --add-opens java.base/java.lang=ALL-UNNAMED -jar chaos-xcom-launcher.jar
+

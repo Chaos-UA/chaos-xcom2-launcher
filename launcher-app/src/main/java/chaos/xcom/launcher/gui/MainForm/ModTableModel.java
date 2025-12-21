@@ -21,13 +21,45 @@ import java.util.function.Function;
 
 @Slf4j
 public class ModTableModel extends XTableModel<Mod> {
+    TableColumn DEPENDENCIES_COLUMN = new TableColumn<>("Dependencies", Integer.class, new Function<Mod, Integer>() {
+        @Override
+        public Integer apply(Mod mod) {
+            return mod.getLoadOrders().size()
+                    + mod.getDependencies().size()
+                    + mod.getHighlanderGroupLoadOrders().size();
+        }
+    });
+    TableColumn DECLARED_DEPENDENCIES_COLUMN = new TableColumn<>("Declared Dependencies", Integer.class, new Function<Mod, Integer>() {
+        @Override
+        public Integer apply(Mod mod) {
+            return mod.getDeclaredDependencies().size() + mod.getDeclaredLoadOrders().size()
+                    + ModService.get().getDeclaredUserDependenciesSize(mod);
+        }
+    });
+    TableColumn HIGHLANDER_GROUPS_COLUMN = new TableColumn<>("Highlander Group", String.class, new Function<Mod, String>() {
+        @Override
+        public String apply(Mod mod) {
+            HighlanderRunPriorityGroup grp = mod.getHighlanderGroupLoadOrders().isEmpty()
+                    ? HighlanderRunPriorityGroup.STANDARD
+                    : mod.getHighlanderGroupLoadOrders().getLast().getPriorityGroup();
+            String text = grp == null ? "" : grp.toString();
+            if (mod.getHighlanderGroupLoadOrders().size() > 1) {
+                // return HTML to enable bold rendering in JTable
+                return "<html><strong>" + text + "</strong></html>";
+            }
+            return text;
+        }
+    });
+    TableColumn STEAM_ID_COLUMN = new TableColumn<>("Steam ID", String.class, (Mod v) -> v.getSteamMod().getSteamModId());
+
     @Getter
     private List<Mod> mods;
     private String modFilter = "";
     private final TableRowSorter<ModTableModel> rowSorter;
     private ModTable modTable;
 
-    private static TableColumn[] createColumns() {
+
+    private TableColumn[] createColumns() {
         return new TableColumn[]{
                 new TableColumn<>("Active", Boolean.class, Mod::isActive),
                 new TableColumn<>("Order", Integer.class, Mod::getLoadOrder, new Function<Integer, String>() {
@@ -39,33 +71,15 @@ public class ModTableModel extends XTableModel<Mod> {
                 new TableColumn<>("ID", String.class, Mod::getId),
                 new TableColumn<>("Title", String.class, Mod::getTitle),
                 new TableColumn<>("Status", String.class, Mod::getStatusAsString),
-                new TableColumn<>("Dependencies", Integer.class, new Function<Mod, Integer>() {
-                    @Override
-                    public Integer apply(Mod mod) {
-                        return mod.getLoadOrders().size()
-                                + mod.getDependencies().size()
-                                + mod.getHighlanderGroupLoadOrders().size();
-                    }
-                }),
-                new TableColumn<>("Declared Dependencies", Integer.class, new Function<Mod, Integer>() {
-                    @Override
-                    public Integer apply(Mod mod) {
-                        return mod.getDeclaredDependencies().size() + mod.getDeclaredLoadOrders().size()
-                                + ModService.get().getDeclaredUserDependenciesSize(mod);
-                    }
-                }),
-                new TableColumn<>("Highlander Group", String.class, new Function<Mod, String>() {
-                    @Override
-                    public String apply(Mod mod) {
-                        HighlanderRunPriorityGroup grp = mod.getHighlanderGroupLoadOrders().isEmpty()
-                                ? HighlanderRunPriorityGroup.STANDARD
-                                : mod.getHighlanderGroupLoadOrders().getLast().getPriorityGroup();
-                        String text = grp == null ? "" : grp.toString();
-                        if (mod.getHighlanderGroupLoadOrders().size() > 1) {
-                            // return HTML to enable bold rendering in JTable
-                            return "<html><strong>" + text + "</strong></html>";
-                        }
-                        return text;
+                DEPENDENCIES_COLUMN,
+                DECLARED_DEPENDENCIES_COLUMN,
+                HIGHLANDER_GROUPS_COLUMN,
+                STEAM_ID_COLUMN,
+                new TableColumn<>("Steam sync at", String.class, (Mod v) -> {
+                    if (v.getSteamMod().getUpdatedAt() == null) {
+                        return "?";
+                    } else {
+                        return DateUtils.format(v.getSteamMod().getUpdatedAt());
                     }
                 }),
                 new TableColumn<>("WOTC", Boolean.class, Mod::isRequiresXPACK, new Function<Boolean, String>() {
@@ -77,21 +91,13 @@ public class ModTableModel extends XTableModel<Mod> {
                         return forWotc ? "Yes" : "No";
                     }
                 }),
-                new TableColumn<>("Steam ID", String.class, (Mod v) -> v.getSteamMod().getSteamModId()),
-                new TableColumn<>("Steam sync at", String.class, (Mod v) -> {
-                    if (v.getSteamMod().getUpdatedAt() == null) {
-                        return "?";
-                    } else {
-                        return DateUtils.format(v.getSteamMod().getUpdatedAt());
-                    }
-                }),
                 new TableColumn<>("Published File ID", String.class, Mod::getPublishedFileId),
                 new TableColumn<>("Size", Long.class, Mod::getSize, FileUtils::formatSizeAsMb)
         };
     };
 
     public ModTableModel(List<Mod> mods) {
-        super(createColumns());
+        this.setColumns(createColumns());
         this.mods = mods;
         this.rowSorter = new TableRowSorter<>(this);
     }

@@ -454,7 +454,7 @@ public class SettingsDialog extends JDialog {
         panel4.add(panel5, new GridConstraints(1, 0, 1, 2, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
         cbArgLog = new JCheckBox();
         cbArgLog.setText("-log");
-        cbArgLog.setToolTipText("Opens a separate console (or window) to display the game’s Launch.log in real time.\nUseful for debugging / checking logs.\nLauncher currently supports Windows only, other OS will have empty output");
+        cbArgLog.setToolTipText("Opens a separate console (or window) to display the game’s Launch.log in real time.\nUseful for debugging / checking logs.");
         panel5.add(cbArgLog, new GridConstraints(0, 2, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         cbArgNoRedScreens = new JCheckBox();
         cbArgNoRedScreens.setText("-noRedscreens");

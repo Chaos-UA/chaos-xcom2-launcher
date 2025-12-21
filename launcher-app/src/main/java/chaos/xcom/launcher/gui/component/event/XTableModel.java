@@ -9,17 +9,28 @@ import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.function.Function;
 
 @Getter
 public class XTableModel<T> extends AbstractTableModel {
 
-    protected final TableColumn[] columns;
+    protected TableColumn[] columns = new TableColumn[0];
     protected List<T> rows = new ArrayList<>();
+    private final HashMap<TableColumn, Integer> columnIndexCache = new HashMap<>();
+
+    public XTableModel() {}
 
     public XTableModel(TableColumn[] columns) {
+        setColumns(columns);
+    }
+
+    protected void setColumns(TableColumn[] columns) {
         this.columns = columns;
+        for (int i = 0; i < columns.length; i++) {
+            columnIndexCache.put(columns[i], i);
+        }
     }
 
     @Override
@@ -40,6 +51,10 @@ public class XTableModel<T> extends AbstractTableModel {
     @Override
     public Object getValueAt(int rowIndex, int columnIndex) {
         return columns[columnIndex].extractor.apply(rows.get(rowIndex));
+    }
+
+    public int getColumnIndex(TableColumn column) {
+        return columnIndexCache.get(column);
     }
 
     @Override

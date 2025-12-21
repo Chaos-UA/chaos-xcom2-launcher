@@ -258,7 +258,7 @@
                     </constraints>
                     <properties>
                       <text value="-log"/>
-                      <toolTipText value="Opens a separate console (or window) to display the game’s Launch.log in real time.&#10;Useful for debugging / checking logs.&#10;Launcher currently supports Windows only, other OS will have empty output"/>
+                      <toolTipText value="Opens a separate console (or window) to display the game’s Launch.log in real time.&#10;Useful for debugging / checking logs."/>
                     </properties>
                   </component>
                   <component id="9af64" class="javax.swing.JCheckBox" binding="cbArgNoRedScreens">
