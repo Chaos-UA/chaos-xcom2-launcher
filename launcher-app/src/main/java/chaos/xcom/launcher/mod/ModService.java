@@ -1232,6 +1232,12 @@ public class ModService {
             } else if (mod.getId().equals(CommunityHighlanderUtils.COMMUNITY_HIGHLANDER_DLC2_MOD_ID)) {
                 HighlanderModConfig config = modsConfig.computeIfAbsent(mod.getId(), v -> new HighlanderModConfig(mod.getId()));
                 config.setRunPriorityGroup(HighlanderRunPriorityGroup.FIRST);
+                if (config.getRunOrderDeclarations().isEmpty()) {
+                    RunOrderDeclaration runOrderDeclaration = new RunOrderDeclaration();
+                    runOrderDeclaration.setTargetMod(CommunityHighlanderUtils.COMMUNITY_HIGHLANDER_MOD_ID);
+                    runOrderDeclaration.setModLoadOrder(ModLoadOrder.AFTER);
+                    config.getRunOrderDeclarations().add(runOrderDeclaration);
+                }
             }
             return mod;
         } catch (Exception e) {
