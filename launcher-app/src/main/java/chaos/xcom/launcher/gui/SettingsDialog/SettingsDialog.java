@@ -6,6 +6,7 @@ import chaos.xcom.launcher.mod.ModService;
 import chaos.xcom.launcher.steam.SteamService;
 import chaos.xcom.launcher.swing.SwingService;
 import chaos.xcom.launcher.util.XComUtils;
+import com.formdev.flatlaf.extras.components.FlatSpinner;
 import com.intellij.uiDesigner.core.GridConstraints;
 import com.intellij.uiDesigner.core.GridLayoutManager;
 import com.intellij.uiDesigner.core.Spacer;
@@ -65,6 +66,7 @@ public class SettingsDialog extends JDialog {
     private JLabel lblXComExe;
     private JCheckBox cbSyncMissingSteamModsOnModsReload;
     private JCheckBox cbGameLogEnabled;
+    private FlatSpinner steamRequestDelaySpinner;
 
     public void openSettings() {
         this.setVisible(true);
@@ -485,7 +487,7 @@ public class SettingsDialog extends JDialog {
         cbArgAutoDebug.setToolTipText("Enables debug-related features (used for development / mod testing)");
         panel5.add(cbArgAutoDebug, new GridConstraints(0, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         final JPanel panel6 = new JPanel();
-        panel6.setLayout(new GridLayoutManager(4, 3, new Insets(0, 0, 0, 0), -1, -1));
+        panel6.setLayout(new GridLayoutManager(5, 3, new Insets(0, 0, 0, 0), -1, -1));
         contentPane.add(panel6, new GridConstraints(3, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
         panel6.setBorder(BorderFactory.createTitledBorder(BorderFactory.createEtchedBorder(), "General", TitledBorder.DEFAULT_JUSTIFICATION, TitledBorder.DEFAULT_POSITION, null, null));
         final JLabel label7 = new JLabel();
@@ -509,7 +511,17 @@ public class SettingsDialog extends JDialog {
         cbGameLogEnabled.setText("xcom-game.log");
         cbGameLogEnabled.setToolTipText("If enabled and game started via launcher then output form process will be written to the file in launcher directory");
         cbGameLogEnabled.setVisible(false);
-        panel6.add(cbGameLogEnabled, new GridConstraints(3, 0, 1, 2, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        panel6.add(cbGameLogEnabled, new GridConstraints(4, 0, 1, 2, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        final JPanel panel8 = new JPanel();
+        panel8.setLayout(new GridLayoutManager(1, 2, new Insets(0, 0, 0, 0), -1, -1));
+        panel6.add(panel8, new GridConstraints(3, 0, 1, 3, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_BOTH, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
+        steamRequestDelaySpinner = new FlatSpinner();
+        steamRequestDelaySpinner.setToolTipText("Steam may return 429 (too many requests) error if requests done too often");
+        panel8.add(steamRequestDelaySpinner, new GridConstraints(0, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
+        final JLabel label8 = new JLabel();
+        label8.setText("Steam mod sync request delay");
+        label8.setToolTipText("Steam may return 429 (too many requests) error if requests done too often");
+        panel8.add(label8, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         final Spacer spacer3 = new Spacer();
         contentPane.add(spacer3, new GridConstraints(4, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_VERTICAL, 1, GridConstraints.SIZEPOLICY_WANT_GROW, null, null, null, 0, false));
     }

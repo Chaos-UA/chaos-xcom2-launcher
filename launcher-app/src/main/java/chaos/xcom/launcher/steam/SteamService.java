@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.LineIterator;
+import org.jsoup.HttpStatusException;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -39,6 +40,12 @@ import java.util.stream.Collectors;
 @Slf4j
 @RequiredArgsConstructor
 public class SteamService {
+
+    /**
+     * How many time to skip processing new requests after receiving a 429 Too Many Requests error from Steam.
+     */
+    private static final int TOO_MANY_REQUESTS_SKIP_TIMEOUT_MS = 5000;
+    private static Instant LAST_STEAM_TOO_MANY_REQUESTS_ERROR_TIMESTAMP = Instant.now().minusSeconds(600000);
 
     private static Pattern MOD_ID_PATTERN = Pattern.compile("/filedetails/\\?id=(\\d+)");
 
@@ -207,6 +214,10 @@ public class SteamService {
     public static Optional<SteamMod> parseSteamMod(String steamModId) {
         try {
             long startTime = System.currentTimeMillis();
+            if (startTime - LAST_STEAM_TOO_MANY_REQUESTS_ERROR_TIMESTAMP.toEpochMilli() < TOO_MANY_REQUESTS_SKIP_TIMEOUT_MS) {
+                log.warn("Skipping steam mod parsing due to recent 429 Too Many Requests error: {}", steamModId);
+                return Optional.empty();
+            }
             Document doc = Jsoup.connect(formatModPageUrl(steamModId))
                     .userAgent("Mozilla/5.0 (Wayland; Linux x86_64)")
                     .timeout(30_000)
@@ -266,6 +277,14 @@ public class SteamService {
                     (endTime - startTime),
                     steamMod.getRequiredSteamMods().size());
             return Optional.of(steamMod);
+        } catch (HttpStatusException e) {
+            if (e.getStatusCode() == 429) {
+                LAST_STEAM_TOO_MANY_REQUESTS_ERROR_TIMESTAMP = Instant.now();
+                log.warn("Steam mod page returned HTTP 429 (Too Many Requests): {}", steamModId);
+            } else {
+                log.error("Failed to fetch steam mod page (HTTP {}): {}", e.getStatusCode(), steamModId);
+            }
+            return Optional.empty();
         } catch (Exception e) {
             log.error("Failed to parse steam mod page: {}", steamModId, e);
             return Optional.empty();
