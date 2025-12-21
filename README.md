@@ -31,4 +31,8 @@ Using the launcher
 - Use the dependency and load order tabs to inspect why a mod is flagged with error and try to resolve load order manually for such mods.
 - Note, the launcher don't handle duplicated mods, if duplicate is present it will allow to use only first mod with such ID.
 
+Download 
+--------
+https://github.com/Chaos-UA/chaos-xcom2-launcher/releases
+
 Enjoy XCOM 2!
