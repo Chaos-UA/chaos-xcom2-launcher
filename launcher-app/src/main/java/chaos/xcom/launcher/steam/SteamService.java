@@ -2,6 +2,7 @@ package chaos.xcom.launcher.steam;
 
 import chaos.db.gen.tables.records.SteamModRecord;
 import chaos.xcom.launcher.common.JsonConverter;
+import chaos.xcom.launcher.db.property.DbProperties;
 import chaos.xcom.launcher.event.EventPublisher;
 import chaos.xcom.launcher.exception.InternalException;
 import chaos.xcom.launcher.steam.SteamMod.SteamRequiredMod;
@@ -45,7 +46,8 @@ public class SteamService {
      * How many time to skip processing new requests after receiving a 429 Too Many Requests error from Steam.
      */
     private static final int TOO_MANY_REQUESTS_SKIP_TIMEOUT_MS = 5000;
-    private static Instant LAST_STEAM_TOO_MANY_REQUESTS_ERROR_TIMESTAMP = Instant.now().minusSeconds(600000);
+    private static Instant LAST_STEAM_TOO_MANY_REQUESTS_ERROR_AT = Instant.now().minusSeconds(600000);
+    private static Instant LAST_STEAM_REQUEST_FINISHED_AT = Instant.now().minusSeconds(600000);
 
     private static Pattern MOD_ID_PATTERN = Pattern.compile("/filedetails/\\?id=(\\d+)");
 
@@ -61,6 +63,7 @@ public class SteamService {
     private final BlockingQueue<String> queueSteamIds = new LinkedBlockingQueue<>();
     private final SteamModRepository steamModRepository;
     private final JsonConverter jsonConverter;
+    private final DbProperties dbProperties;
 
     @PostConstruct
     // Start a virtual thread to process items
@@ -211,12 +214,18 @@ public class SteamService {
         return "https://steamcommunity.com/workshop/filedetails/?id=" + modId;
     }
 
-    public static Optional<SteamMod> parseSteamMod(String steamModId) {
+    public Optional<SteamMod> parseSteamMod(String steamModId) {
         try {
             long startTime = System.currentTimeMillis();
-            if (startTime - LAST_STEAM_TOO_MANY_REQUESTS_ERROR_TIMESTAMP.toEpochMilli() < TOO_MANY_REQUESTS_SKIP_TIMEOUT_MS) {
+            if (startTime - LAST_STEAM_TOO_MANY_REQUESTS_ERROR_AT.toEpochMilli() < TOO_MANY_REQUESTS_SKIP_TIMEOUT_MS) {
                 log.warn("Skipping steam mod parsing due to recent 429 Too Many Requests error: {}", steamModId);
                 return Optional.empty();
+            }
+            int requestDelayMs = dbProperties.steamRequestDelaySec.get() * 1000;
+            if (startTime - LAST_STEAM_REQUEST_FINISHED_AT.toEpochMilli() < requestDelayMs) {
+                long sleepTime = requestDelayMs - (startTime - LAST_STEAM_REQUEST_FINISHED_AT.toEpochMilli());
+                log.info("Sleeping {} ms before next steam request", sleepTime);
+                Thread.sleep(sleepTime);
             }
             Document doc = Jsoup.connect(formatModPageUrl(steamModId))
                     .userAgent("Mozilla/5.0 (Wayland; Linux x86_64)")
@@ -279,7 +288,7 @@ public class SteamService {
             return Optional.of(steamMod);
         } catch (HttpStatusException e) {
             if (e.getStatusCode() == 429) {
-                LAST_STEAM_TOO_MANY_REQUESTS_ERROR_TIMESTAMP = Instant.now();
+                LAST_STEAM_TOO_MANY_REQUESTS_ERROR_AT = Instant.now();
                 log.warn("Steam mod page returned HTTP 429 (Too Many Requests): {}", steamModId);
             } else {
                 log.error("Failed to fetch steam mod page (HTTP {}): {}", e.getStatusCode(), steamModId);
@@ -288,6 +297,8 @@ public class SteamService {
         } catch (Exception e) {
             log.error("Failed to parse steam mod page: {}", steamModId, e);
             return Optional.empty();
+        } finally {
+            LAST_STEAM_REQUEST_FINISHED_AT = Instant.now();
         }
     }
 

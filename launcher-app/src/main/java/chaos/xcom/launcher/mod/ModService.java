@@ -453,9 +453,6 @@ public class ModService {
             }
         }
 
-        if (dbProps.syncMissingSteamModsOnReload.get()) {
-            this.syncMissingSteamMods();
-        }
         SwingUtilities.invokeLater(() -> mainForm.setMods(tableMods));
     }
 
@@ -1148,6 +1145,9 @@ public class ModService {
 
         allMods = map;
         recalculateModDependencies();
+        if (dbProps.syncMissingSteamModsOnReload.get()) {
+            this.syncMissingSteamMods();
+        }
     }
 
     void fillSteamMods(Map<String, Mod> mods) {

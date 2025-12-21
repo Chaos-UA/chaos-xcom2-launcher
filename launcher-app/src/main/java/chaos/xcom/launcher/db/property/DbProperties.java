@@ -35,6 +35,10 @@ public class DbProperties extends AbstractProperties {
      */
     public final BooleanProperty gameLogEnabled = booleanProp("gameLogEnabled", false,
             "Write log to xcom-game.log file in launcher directory");
+
+    public final IntProperty steamRequestDelaySec = requiredIntProp("steamRequestDelay", 5,
+            "Steam mod sync request delay (seconds)");
+
     public final JsonProperty<SwingComponentStates> swingComponentStates = jsonProp("swingComponentStates",
             new TypeReference<>() {}, new SwingComponentStates(),
             "Swing components states. Windows positions, sizes, etc.");

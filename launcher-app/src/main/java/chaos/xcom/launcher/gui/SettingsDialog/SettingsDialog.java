@@ -266,11 +266,30 @@ public class SettingsDialog extends JDialog {
             reloadGameLogEnabled();
         });
 
+
+        SpinnerNumberModel steamDelayModel = new SpinnerNumberModel(dbProps.steamRequestDelaySec.get().intValue(), 0, 600, 1);
+        steamRequestDelaySpinner.setModel(steamDelayModel);
+        // listen for changes and persist
+        steamRequestDelaySpinner.addChangeListener(e -> {
+            int val = (Integer) steamRequestDelaySpinner.getValue();
+            if (val < 0) {
+                val = 0;
+                steamRequestDelaySpinner.setValue(0);
+            }
+            dbProps.steamRequestDelaySec.set(val);
+            reloadSteamRequestDelay();
+        });
+        reloadSteamRequestDelay();
+
         swingService.applyFullWindowState("SettingsDialog", this);
     }
 
     private void reloadGameLogEnabled() {
         cbGameLogEnabled.setSelected(dbProps.gameLogEnabled.isTrue());
+    }
+
+    private void reloadSteamRequestDelay() {
+        steamRequestDelaySpinner.setValue(dbProps.steamRequestDelaySec.get());
     }
 
     private void reloadGameExe() {
