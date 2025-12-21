@@ -188,4 +188,3 @@ public class ModTableModel extends XTableModel<Mod> {
         fireTableDataChanged();
     }
 }
-

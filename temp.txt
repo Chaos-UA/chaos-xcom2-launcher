@@ -1,0 +1,15 @@
+
+
+## Assemble low size JRE:
+--add-modules java.desktop,java.sql,jdk.zipfs,jdk.unsupported,java.rmi,java.security.jgss --strip-debug --no-header-files --no-man-pages --compress=2 --output target\jre
+
+## native image:
+export JAVA_HOME=/path/to/graalvm
+export PATH="$JAVA_HOME/bin:$PATH"
+java -Djava.awt.headless=false -agentlib:native-image-agent=config-merge-dir=src/main/resources/META-INF/native-image  -jar target/paint-1.0.0.jar
+java -Djava.awt.headless=false -agentlib:native-image-agent=config-merge-dir=D:\projects\chaos-xcom-launcher\native-temp  -jar target/paint-1.0.0.jar
+
+
+
+## flags to use?
+-Xmx300m -XX:JbrShrinkingGcMaxHeapFreeRatio=10 -XX:+IgnoreUnrecognizedVMOptions sun.java2d.metal=true -XX:+UseCompressedOops

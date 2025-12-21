@@ -13,7 +13,7 @@
     </modules>
 
     <properties>
-<!--        <quarkus.package.jar.type>uber-jar</quarkus.package.jar.type>-->
+        <quarkus.package.jar.type>uber-jar</quarkus.package.jar.type>
         <lombok.version>1.18.42</lombok.version>
         <compiler-plugin.version>3.14.1</compiler-plugin.version>
         <maven.compiler.release>21</maven.compiler.release>
