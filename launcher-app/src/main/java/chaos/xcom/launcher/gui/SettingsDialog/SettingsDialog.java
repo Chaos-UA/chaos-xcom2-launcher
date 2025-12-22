@@ -144,8 +144,8 @@ public class SettingsDialog extends JDialog {
                 String gameDir = selectedDir.getAbsolutePath();
                 settingsService.updateGameExe(gameDir);
                 reloadGameExe();
-                tfGameExe.setText(dbProps.gameExe.optional().orElse(null));
                 reloadModDirs();
+                reloadUserGameDir();
                 log.info("Selected game exe: {}", gameDir);
             }
         });
@@ -538,7 +538,7 @@ public class SettingsDialog extends JDialog {
         steamRequestDelaySpinner.setToolTipText("Steam may return 429 (too many requests) error if requests done too often");
         panel8.add(steamRequestDelaySpinner, new GridConstraints(0, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, null, null, null, 0, false));
         final JLabel label8 = new JLabel();
-        label8.setText("Steam mod sync request delay");
+        label8.setText("Steam mod sync request delay in seconds");
         label8.setToolTipText("Steam may return 429 (too many requests) error if requests done too often");
         panel8.add(label8, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_FIXED, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         final Spacer spacer3 = new Spacer();
