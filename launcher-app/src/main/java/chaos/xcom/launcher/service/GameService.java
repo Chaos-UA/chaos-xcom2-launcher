@@ -18,7 +18,9 @@ import javax.swing.*;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Singleton
@@ -117,6 +119,28 @@ public class GameService {
         if (dbProps.exitOnGameLaunch.isTrue()) {
             log.info("Exiting after game started");
             System.exit(0);
+        }
+
+        if (!OsUtils.IS_WINDOWS && exeFile.getName().toLowerCase().endsWith(".exe")) {
+            Thread.ofVirtual().start(() -> {
+                for (int i = 0; i < 10; i++) {
+                    try {
+                        Thread.sleep(500);
+                        if (!process.isAlive()) {
+                            log.warn("On non-Windows OS the XCOM exe file may require Steam Proton or Wine to run properly.");
+                            JOptionPane.showMessageDialog(SwingService.getLastActiveWindowBounds(),
+                                    "XCOM 2 game configs and mods applied correctly, but the game launch failed."
+                                            + "\nOn non-Windows OS the " + exeFile.getName() + " file may require Steam Proton or Wine to run properly."
+                                            + "\nMake sure to launch the game via Steam with Proton (without native launcher) or use Wine if you face launch issues.",
+                                    "Info", JOptionPane.INFORMATION_MESSAGE);
+                            break;
+                        }
+                    } catch (InterruptedException e) {
+                        log.error("Interrupted while monitoring XCOM process on non-Windows OS", e);
+                        break;
+                    }
+                }
+            });
         }
     }
 
