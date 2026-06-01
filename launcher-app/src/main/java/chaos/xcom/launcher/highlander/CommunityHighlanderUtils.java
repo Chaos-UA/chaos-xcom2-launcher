@@ -11,15 +11,57 @@ import org.apache.commons.lang3.StringUtils;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Comparator;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Slf4j
 public class CommunityHighlanderUtils {
+    public static final String CONFIG_DIR_NAME = "Config";
+    public static final String XCOM_GAME_INI_FILE_NAME = "XComGame.ini";
+    public static final int MAX_RECURSION_DIRS_DEPTH = 5;
     public static final String COMMUNITY_HIGHLANDER_MOD_ID = "X2WOTCCommunityHighlander";
     public static final String COMMUNITY_HIGHLANDER_DLC2_MOD_ID = "DLC2CommunityHighlander";
     private static final Pattern SECTION_PATTERN = Pattern.compile("\\[(\\S+)(?:\\s+(\\S+))?\\]");
     private static final Pattern ENTRY_PATTERN = Pattern.compile("(\\+?)(\\S+)=(.*)");
+
+    static List<File> findAllXcomGameIniFiles(File modConfigDir) {
+        try {
+            return Files.walk(modConfigDir.toPath(), MAX_RECURSION_DIRS_DEPTH)
+                    .filter(Files::isRegularFile)
+                    .filter(path -> XCOM_GAME_INI_FILE_NAME.equals(path.getFileName().toString()))
+                    .sorted(Comparator.comparing(Path::toString))
+                    .map(Path::toFile)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("Failed to find XComGame.ini files in {}", modConfigDir, e);
+            return List.of();
+        }
+    }
+
+    public static HighlanderModsConfig parseHighlanderAllXComGameIniFromModDir(String mod, File modDir) {
+        File configDir = new File(modDir + "/Config");
+        List<File> xcomGameIniFiles = findAllXcomGameIniFiles(configDir);
+        HighlanderModsConfig combinedConfig = new HighlanderModsConfig();
+        for (File xcomGameIni : xcomGameIniFiles) {
+            HighlanderModsConfig config = parseHighlanderXComGameIni(mod, xcomGameIni);
+            config.getModConfigs().forEach((modId, anotherModConfig) -> {
+                HighlanderModConfig conf = combinedConfig.getModConfigs().computeIfAbsent(modId, k -> new HighlanderModConfig(modId));
+                conf.getRequiredMods().addAll(anotherModConfig.getRequiredMods());
+                conf.getIncompatibleMods().addAll(anotherModConfig.getIncompatibleMods());
+                conf.getIgnoreRequiredMods().addAll(anotherModConfig.getIgnoreRequiredMods());
+                conf.getRunOrderDeclarations().addAll(anotherModConfig.getRunOrderDeclarations());
+                if (anotherModConfig.getRunPriorityGroup() != null && conf.getRunOrderDeclarations() == null) {
+                    conf.setRunPriorityGroup(anotherModConfig.getRunPriorityGroup());
+                }
+            });
+        }
+        return combinedConfig;
+    }
 
     /**
      * Parses highlander entities from XComGame.ini file.

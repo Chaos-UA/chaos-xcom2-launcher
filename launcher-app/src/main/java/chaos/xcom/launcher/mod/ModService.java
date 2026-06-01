@@ -1220,8 +1220,7 @@ public class ModService {
                     log.error("Failed to parse steam mod ID from dir name: {}", modFile.getParentFile().getName(), e);
                 }
             }
-            File xcomGameIniFile = new File(modFile.getParentFile().getAbsolutePath() + "/Config/XComGame.ini");
-            mod.setHighlanderModsConfig(CommunityHighlanderUtils.parseHighlanderXComGameIni(mod.getId(), xcomGameIniFile));
+            mod.setHighlanderModsConfig(CommunityHighlanderUtils.parseHighlanderAllXComGameIniFromModDir(mod.getId(), modFile.getParentFile()));
             Map<String, HighlanderModConfig> modsConfig = mod.getHighlanderModsConfig().getModConfigs();
             if (mod.getId().equals(CommunityHighlanderUtils.COMMUNITY_HIGHLANDER_MOD_ID)) {
                 HighlanderModConfig config = modsConfig.computeIfAbsent(mod.getId(), v -> new HighlanderModConfig(mod.getId()));
