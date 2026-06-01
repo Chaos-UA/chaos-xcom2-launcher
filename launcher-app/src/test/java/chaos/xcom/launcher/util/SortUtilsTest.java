@@ -387,6 +387,84 @@ class SortUtilsTest {
         assertEquals("gg3", result.getSorted().get(lastIndex), toResolvedItemsString(result.getSorted()));
     }
 
+    @Test
+    void multipleItems_shouldSortModsSample() throws Exception {
+        // given
+        SortItem<String> item1 = new SortItem<>();
+        item1.setValue("WOTCMoreSparkWeapons");
+        item1.setBeforeValues(Set.of());
+        item1.setAfterValues(Set.of(
+                "zzzWeaponSkinReplacer",
+                "X2WOTCCommunityHighlander",
+                "WOTCIridarTemplateMaster",
+                "WepUpgradeFix"
+        ));
+
+        // 2. ExpandedPlayableAliens
+        SortItem<String> item2 = new SortItem<>();
+        item2.setValue("ExpandedPlayableAliens");
+        item2.setBeforeValues(Set.of());
+        item2.setAfterValues(Set.of(
+                "WOTCStormriderClass", "FrostDivision", "MeristPerkPack", "zzzWeaponSkinReplacer",
+                "WoTCPathfinders", "MutonHunter", "WOTCIridarPerkPack", "LongWarOfTheChosen",
+                "MutonHarriers", "MercPlasmaGhostTemplates", "PetRockPerkPack", "BstarsPerkPack",
+                "Ketaros2DResources", "MitzrutiPerkPack", "TedModJamForLWOTC", "AbilityToSlotReassignment",
+                "WelcometotheDromeDome", "WOTC_ExtendedPerkPack", "WotC_AshlynneMutonDestroyer", "ABBPerkPack",
+                "AssTroopers", "PlayableTitanArmor", "WOTCIridarTemplateMaster", "BioDivision",
+                "ShadowOpsPerkPack", "AbilityEditor", "WotC_AshlynneFlameViper", "PlayableXCOM2AliensLWOTC",
+                "WOTCIridarAdventArsenalGhostTemplates"
+        ));
+
+        // 3. TedModJamForLWOTC
+        SortItem<String> item3 = new SortItem<>();
+        item3.setValue("TedModJamForLWOTC");
+        item3.setBeforeValues(Set.of());
+        item3.setAfterValues(Set.of(
+                "WOTCClausImmolators", "FrostDivision", "WOTCMoreSparkWeapons", "WOTC_CombiWSLAB",
+                "WOTCCoreCollection", "LongWarOfTheChosen", "MutonHarriers", "Ketaros2DResources",
+                "NelVlesis_Icon_Overrides", "ImmolatorChemthrower", "MitzrutiPerkPack", "X2WOTCCommunityHighlander",
+                "NegativeMobilityFix", "WotC_AshlynneAdvWarlock", "TruePrimarySecondaries", "RepurposeAbilities",
+                "WOTC_GunRaisedAnim", "WOTCIridarTemplateMaster", "BioDivision", "ConfigurableImmunities",
+                "ChooseYourAliens", "WOTCRocketLaunchers", "EverVigilantBugfixesConfigAddOn", "NormalizeLoot",
+                "WOTCIridarLaserCoilAssets", "EnemyReskinnerRedux", "AbilityEditor"
+        ));
+
+        // 4. zzzWeaponSkinReplacer
+        SortItem<String> item4 = new SortItem<>();
+        item4.setValue("zzzWeaponSkinReplacer");
+        item4.setBeforeValues(Set.of());
+        item4.setAfterValues(Set.of(
+                "TedModJamForLWOTC",
+                "TruePrimarySecondaries",
+                "X2WOTCCommunityHighlander",
+                "LongWarOfTheChosen",
+                "WOTC_GunRaisedAnim",
+                "PrimarySecondaries",
+                "XCOM2RPGOverhaul"
+        ));
+
+        // 5. PlayableXCOM2AliensLWOTC
+        SortItem<String> item5 = new SortItem<>();
+        item5.setValue("PlayableXCOM2AliensLWOTC");
+        item5.setBeforeValues(Set.of("ModJamLWOTC"));
+        item5.setAfterValues(Set.of(
+                "ABBPerkPack", "SensibleMissionPenalties_WOTC", "zzzWeaponSkinReplacer", "IridarsPsiOverhaul",
+                "RepurposeAbilities", "XV_ViperSkills", "Ketaros2DResources", "ZombiesDontCountWOTC",
+                "ShadowOpsPerkPack", "MitzrutiPerkPack", "CryoPerkPack", "SlagAndMelta",
+                "WOTC_ExtendedPerkPack", "X2WOTCCommunityHighlander", "MechatronicWarfarePerkPack", "ZombiesFix",
+                "AbilityEditor", "NoUnconsciousAI"
+        ));
+
+        List<SortItem<String>> items = List.of(item1, item2, item3, item4, item5);
+
+        // when
+        SortResult<String> result = SortUtils.sort(items);
+
+        // then
+        assertEquals(items.size(), result.getSorted().size());
+        assertBefore(result.getSorted(), "PlayableXCOM2AliensLWOTC", "ExpandedPlayableAliens");
+    }
+
     private SortItem<String> item(String value, Set<String> before, Set<String> after) {
         SortItem<String> i = new SortItem<>();
         i.setValue(value);
@@ -399,15 +477,15 @@ class SortUtilsTest {
      * Assert that item1 comes before item2 in the sorted list.
      * On failure, prints all sorted items with their indices for debugging.
      */
-    private void assertBefore(List<String> sorted, String item1, String item2) {
-        int index1 = sorted.indexOf(item1);
-        int index2 = sorted.indexOf(item2);
+    private void assertBefore(List<String> sorted, String itemBefore, String itemAfter) {
+        int index1 = sorted.indexOf(itemBefore);
+        int index2 = sorted.indexOf(itemAfter);
 
         if (index1 == -1 || index2 == -1 || index1 >= index2) {
             StringBuilder sb = new StringBuilder();
-            sb.append("\n❌ Assertion failed: '").append(item1).append("' should come before '").append(item2).append("'\n");
-            sb.append("   ").append(item1).append(" index: ").append(index1).append("\n");
-            sb.append("   ").append(item2).append(" index: ").append(index2).append("\n\n");
+            sb.append("\n❌ Assertion failed: '").append(itemBefore).append("' should come before '").append(itemAfter).append("'\n");
+            sb.append("   ").append(itemBefore).append(" index: ").append(index1).append("\n");
+            sb.append("   ").append(itemAfter).append(" index: ").append(index2).append("\n\n");
             sb.append(toResolvedItemsString(sorted));
             throw new AssertionError(sb.toString());
         }

@@ -8,9 +8,6 @@ import java.util.stream.Collectors;
 
 public class SortUtils {
 
-    /* =======================
-       Input DTO
-       ======================= */
     @Data
     public static class SortItem<T> {
         private T value;
@@ -18,19 +15,6 @@ public class SortUtils {
         private Set<T> afterValues = new HashSet<>();
     }
 
-    /* =======================
-       Internal one-direction model
-       value -> afterValues
-       ======================= */
-    @Data
-    private static class SortItemOneDirection<T> {
-        private T value;
-        private Set<T> afterValues = new HashSet<>();
-    }
-
-    /* =======================
-       Result DTO
-       ======================= */
     @Data
     public static class SortResult<T> {
         private final List<T> sorted;
@@ -46,229 +30,130 @@ public class SortUtils {
         }
     }
 
-    /* =======================
-       Public API
-       ======================= */
-
     public static <T> SortResult<T> sort(Collection<SortItem<T>> input) {
-        Collection<SortItemOneDirection<T>> oneDir = convert(input);
-        return sortOneDirection(oneDir);
-    }
+        Map<String, T> originalValueMap = new LinkedHashMap<>();
+        Map<String, Set<String>> graph = new LinkedHashMap<>();
+        Set<String> explicitInputSet = new LinkedHashSet<>();
 
-    /* =======================
-       Conversion: before/after → after-only
-       ======================= */
-    private static <T> Collection<SortItemOneDirection<T>> convert(Collection<SortItem<T>> input
-    ) {
-        Map<T, SortItemOneDirection<T>> result = new LinkedHashMap<>();
-
-        for (SortItem<T> v : input) {
-            SortItemOneDirection<T> od = new SortItemOneDirection<>();
-            od.setValue(v.getValue());
-            result.put(v.getValue(), od);
-        }
-
+        // 1) Initialize structures and build standard directed edges (From -> To)
+        // Must be done in a single pass to preserve the historical discovery order of implicit nodes!
         for (SortItem<T> item : input) {
-            T v = item.getValue();
+            String valKey = normalize(item.getValue());
+            originalValueMap.putIfAbsent(valKey, item.getValue());
+            explicitInputSet.add(valKey);
+            graph.putIfAbsent(valKey, new LinkedHashSet<>());
 
-            // v must be AFTER x → x -> v
-            for (T after : item.getAfterValues()) {
-                if (result.containsKey(after)) {
-                    result.get(after).getAfterValues().add(v);
+            for (T a : item.getAfterValues()) {
+                String aKey = normalize(a);
+                originalValueMap.putIfAbsent(aKey, a);
+                graph.putIfAbsent(aKey, new LinkedHashSet<>());
+                graph.get(aKey).add(valKey); // a must come before valKey
+            }
+
+            for (T b : item.getBeforeValues()) {
+                String bKey = normalize(b);
+                originalValueMap.putIfAbsent(bKey, b);
+                graph.putIfAbsent(bKey, new LinkedHashSet<>());
+                graph.get(valKey).add(bKey); // valKey must come before b
+            }
+        }
+
+        // 2) Snapshot strict initial sequence
+        List<String> fullDiscoveryOrder = new ArrayList<>(originalValueMap.keySet());
+        Map<String, Integer> baseIndexMap = new HashMap<>();
+        for (int i = 0; i < fullDiscoveryOrder.size(); i++) {
+            baseIndexMap.put(fullDiscoveryOrder.get(i), i);
+        }
+
+        // 3) Identify cycles independently for reporting via Tarjan's SCC
+        List<List<T>> detectedCycles = new ArrayList<>();
+        List<Set<String>> sccs = findSCCs(graph, new HashSet<>(fullDiscoveryOrder));
+        for (Set<String> scc : sccs) {
+            if (scc.size() > 1) {
+                List<T> cycleNodes = scc.stream()
+                        .filter(explicitInputSet::contains)
+                        .map(originalValueMap::get)
+                        .collect(Collectors.toList());
+                if (!cycleNodes.isEmpty()) {
+                    detectedCycles.add(cycleNodes);
                 }
             }
+        }
 
-            // v must be BEFORE x → v -> x
-            for (T before : item.getBeforeValues()) {
-                if (result.containsKey(before)) {
-                    result.get(v).getAfterValues().add(before);
-                }
+        // 4) Build a stable DFS topological sort
+        // We sort neighbors descending so when we reverse the final result, the original order is strictly preserved.
+        Map<String, List<String>> sortedGraph = new HashMap<>();
+        for (Map.Entry<String, Set<String>> entry : graph.entrySet()) {
+            List<String> neighbors = new ArrayList<>(entry.getValue());
+            neighbors.sort((a, b) -> Integer.compare(baseIndexMap.get(b), baseIndexMap.get(a)));
+            sortedGraph.put(entry.getKey(), neighbors);
+        }
+
+        List<String> reverseOrderNodes = new ArrayList<>(fullDiscoveryOrder);
+        reverseOrderNodes.sort((a, b) -> Integer.compare(baseIndexMap.get(b), baseIndexMap.get(a)));
+
+        Set<String> visited = new HashSet<>();
+        Set<String> onStack = new HashSet<>();
+        List<String> resultIds = new ArrayList<>();
+
+        // Start DFS from back to front
+        for (String node : reverseOrderNodes) {
+            if (!visited.contains(node)) {
+                dfs(node, sortedGraph, visited, onStack, resultIds);
             }
         }
 
-        return result.values();
-    }
+        // Reverse to get perfect Topological Order
+        Collections.reverse(resultIds);
 
-    /* =======================
-       Core algorithm
-       ======================= */
-    private static <T> SortResult<T> sortOneDirection(Collection<SortItemOneDirection<T>> items) {
-        Map<T, List<T>> graph = new LinkedHashMap<>();
-        Map<T, Integer> indegree = new LinkedHashMap<>();
-        List<T> inputOrder = new ArrayList<>();
-
-        for (SortItemOneDirection<T> v : items) {
-            T value = v.getValue();
-            graph.put(value, new ArrayList<>());
-            indegree.put(value, 0);
-            inputOrder.add(value);
-        }
-
-        for (SortItemOneDirection<T> item : items) {
-            for (T after : item.getAfterValues()) {
-                // ignore unknown targets
-                if (!graph.containsKey(after)) {
-                    continue;
-                }
-                graph.get(item.getValue()).add(after);
-                indegree.put(after, indegree.get(after) + 1);
-            }
-        }
-
-        /* ---------- Stable Kahn (preserve input order among available nodes) ---------- */
-        Map<T, Integer> inputIndex = new HashMap<>();
-        for (int i = 0; i < inputOrder.size(); i++) {
-            inputIndex.put(inputOrder.get(i), i);
-        }
-
-        PriorityQueue<T> pq = new PriorityQueue<>(Comparator.comparingInt(inputIndex::get));
-        for (T node : inputOrder) if (indegree.get(node) == 0) pq.add(node);
-
-        List<T> sorted = new ArrayList<>();
-        while (!pq.isEmpty()) {
-            T v = pq.poll();
-            sorted.add(v);
-            for (T nxt : graph.get(v)) {
-                indegree.put(nxt, indegree.get(nxt) - 1);
-                if (indegree.get(nxt) == 0) pq.add(nxt);
-            }
-        }
-
-        /* ---------- Cycles ---------- */
-        Set<T> remaining = indegree.entrySet().stream()
-                .filter(e -> e.getValue() > 0)
-                .map(Map.Entry::getKey)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-
-        List<List<T>> cycles = new ArrayList<>();
-        if (remaining.isEmpty()) {
-            return new SortResult<>(sorted, cycles);
-        }
-
-        List<Set<T>> sccs = findSCCs(graph, remaining);
-        // collect cycle SCCs (size>1 or self-loop if present)
-        List<Set<T>> cycleSCCs = sccs.stream().filter(s -> s.size() > 1).toList();
-        Set<T> cycleNodes = cycleSCCs.stream().flatMap(Set::stream).collect(Collectors.toCollection(LinkedHashSet::new));
-        for (Set<T> scc : cycleSCCs) cycles.add(new ArrayList<>(scc));
-
-        /* ---------- Final merge: Emit in phases (all respecting input order):
-           1) sorted acyclic nodes (from Kahn) excluding cycle-related nodes
-           2) nodes that can reach cycles (preCycle)
-           3) cycle SCC blocks (in input order)
-           4) nodes reachable from cycles (postCycle)
-           5) any remaining nodes
-         */
-        // Build reverse graph for reachability checks
-        Map<T, List<T>> reverseGraph = new LinkedHashMap<>();
-        for (T v : graph.keySet()) reverseGraph.put(v, new ArrayList<>());
-        for (Map.Entry<T, List<T>> e : graph.entrySet()) {
-            T from = e.getKey();
-            for (T to : e.getValue()) {
-                reverseGraph.get(to).add(from);
-            }
-        }
-
-        // compute postCycle: nodes reachable from any cycle node
-        Set<T> postCycle = new LinkedHashSet<>();
-        ArrayDeque<T> q = new ArrayDeque<>(cycleNodes);
-        while (!q.isEmpty()) {
-            T cur = q.poll();
-            for (T nxt : graph.getOrDefault(cur, List.of())) {
-                if (!cycleNodes.contains(nxt) && postCycle.add(nxt)) q.add(nxt);
-            }
-        }
-
-        // compute preCycle: nodes that can reach cycle nodes
-        Set<T> preCycle = new LinkedHashSet<>();
-        q.clear();
-        q.addAll(cycleNodes);
-        while (!q.isEmpty()) {
-            T cur = q.poll();
-            for (T prev : reverseGraph.getOrDefault(cur, List.of())) {
-                if (!cycleNodes.contains(prev) && preCycle.add(prev)) q.add(prev);
-            }
-        }
-
+        // 5) Extract final explicit nodes
         List<T> finalSorted = new ArrayList<>();
-        Set<T> emitted = new HashSet<>();
-
-        // Map node -> its SCC for quick lookup
-        Map<T, Set<T>> nodeToScc = new HashMap<>();
-        for (Set<T> scc : cycleSCCs) for (T v : scc) nodeToScc.put(v, scc);
-
-        // 1) emit sorted acyclic nodes that are not part of cycles or postCycle (these came from Kahn)
-        for (T node : inputOrder) {
-            if (sorted.contains(node) && !cycleNodes.contains(node) && !postCycle.contains(node) && !emitted.contains(node)) {
-                finalSorted.add(node);
-                emitted.add(node);
+        for (String id : resultIds) {
+            if (explicitInputSet.contains(id)) {
+                finalSorted.add(originalValueMap.get(id));
             }
         }
 
-        // 2) emit preCycle nodes in input order
-        for (T node : inputOrder) {
-            if (preCycle.contains(node) && !emitted.contains(node)) {
-                finalSorted.add(node);
-                emitted.add(node);
-            }
-        }
-
-        // 3) emit cycle SCCs in input order (emit each SCC members in input order)
-        for (T node : inputOrder) {
-            if (cycleNodes.contains(node) && !emitted.contains(node)) {
-                Set<T> scc = nodeToScc.get(node);
-                for (T n : inputOrder) {
-                    if (scc.contains(n) && !emitted.contains(n)) {
-                        finalSorted.add(n);
-                        emitted.add(n);
-                    }
-                }
-            }
-        }
-
-        // 4) emit postCycle nodes in input order
-        for (T node : inputOrder) {
-            if (postCycle.contains(node) && !emitted.contains(node)) {
-                finalSorted.add(node);
-                emitted.add(node);
-            }
-        }
-
-        // 5) any remaining (fallback)
-        for (T node : inputOrder) {
-            if (!emitted.contains(node)) {
-                finalSorted.add(node);
-                emitted.add(node);
-            }
-        }
-
-        return new SortResult<>(finalSorted, cycles);
+        return new SortResult<>(finalSorted, detectedCycles);
     }
 
-    /* =======================
-       Tarjan SCC
-       ======================= */
-    private static <T> List<Set<T>> findSCCs(
-            Map<T, List<T>> graph,
-            Set<T> nodes
-    ) {
-        List<Set<T>> result = new ArrayList<>();
-        Map<T, Integer> index = new HashMap<>();
-        Map<T, Integer> low = new HashMap<>();
-        Deque<T> stack = new ArrayDeque<>();
-        Set<T> onStack = new HashSet<>();
+    private static void dfs(String u, Map<String, List<String>> graph, Set<String> visited, Set<String> onStack, List<String> resultIds) {
+        visited.add(u);
+        onStack.add(u); // Track active path to detect and ignore cycle back-edges safely
+
+        for (String v : graph.getOrDefault(u, Collections.emptyList())) {
+            if (!visited.contains(v)) {
+                dfs(v, graph, visited, onStack, resultIds);
+            }
+        }
+
+        onStack.remove(u);
+        resultIds.add(u);
+    }
+
+    private static String normalize(Object val) {
+        if (val == null) return "";
+        return val.toString().toLowerCase(Locale.ROOT).trim();
+    }
+
+    private static List<Set<String>> findSCCs(Map<String, Set<String>> graph, Set<String> nodes) {
+        List<Set<String>> result = new ArrayList<>();
+        Map<String, Integer> index = new HashMap<>();
+        Map<String, Integer> low = new HashMap<>();
+        Deque<String> stack = new ArrayDeque<>();
+        Set<String> onStack = new HashSet<>();
         int[] idx = {0};
 
         class DFS {
-            void visit(T v) {
+            void visit(String v) {
                 index.put(v, idx[0]);
                 low.put(v, idx[0]);
                 idx[0]++;
                 stack.push(v);
                 onStack.add(v);
 
-                for (T w : graph.get(v)) {
+                for (String w : graph.getOrDefault(v, Collections.emptySet())) {
                     if (!nodes.contains(w)) continue;
-
                     if (!index.containsKey(w)) {
                         visit(w);
                         low.put(v, Math.min(low.get(v), low.get(w)));
@@ -278,8 +163,8 @@ public class SortUtils {
                 }
 
                 if (low.get(v).equals(index.get(v))) {
-                    Set<T> scc = new LinkedHashSet<>();
-                    T w;
+                    Set<String> scc = new LinkedHashSet<>();
+                    String w;
                     do {
                         w = stack.pop();
                         onStack.remove(w);
@@ -291,12 +176,11 @@ public class SortUtils {
         }
 
         DFS dfs = new DFS();
-        for (T v : nodes) {
+        for (String v : nodes) {
             if (!index.containsKey(v)) {
                 dfs.visit(v);
             }
         }
-
         return result;
     }
 }
