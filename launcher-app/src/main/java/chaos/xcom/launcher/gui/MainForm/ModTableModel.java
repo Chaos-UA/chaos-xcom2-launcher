@@ -21,6 +21,7 @@ import java.util.function.Function;
 
 @Slf4j
 public class ModTableModel extends XTableModel<Mod> {
+
     TableColumn DEPENDENCIES_COLUMN = new TableColumn<>("Dependencies", Integer.class, new Function<Mod, Integer>() {
         @Override
         public Integer apply(Mod mod) {
@@ -69,7 +70,7 @@ public class ModTableModel extends XTableModel<Mod> {
                     }
                 }),
                 new TableColumn<>("ID", String.class, Mod::getId),
-                new TableColumn<>("Title", String.class, Mod::getTitle),
+                new TableColumn<>("Title", String.class, (Mod mod) -> ModService.get().getModTitle(mod.getId())),
                 new TableColumn<>("Status", String.class, Mod::getStatusAsString),
                 DEPENDENCIES_COLUMN,
                 DECLARED_DEPENDENCIES_COLUMN,

@@ -5,6 +5,7 @@ import chaos.db.gen.tables.records.UserModRuleRecord;
 import chaos.xcom.launcher.common.JsonConverter;
 import chaos.xcom.launcher.db.property.DbProperties;
 import chaos.xcom.launcher.event.SkinChangeEvent;
+import chaos.xcom.launcher.gui.EditModAliasesDialog.EditModAliasesDialog;
 import chaos.xcom.launcher.gui.EditModDependencyDialog.EditModDependencyDialog;
 import chaos.xcom.launcher.gui.LookAndFeelService;
 import chaos.xcom.launcher.gui.MainForm.LauncherService;
@@ -37,6 +38,7 @@ import jakarta.enterprise.event.ObservesAsync;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.inject.Singleton;
 import lombok.Data;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -75,10 +77,16 @@ public class ModService {
    // private Map<String, List<Mod>> modsMap = new HashMap<>();
 
     private LinkedHashMap<String, Mod> allMods = new LinkedHashMap<>();
+    /**
+     * Contains only aliases if relevant steam mod ID not found as mod
+     */
+    private HashMap<String, Mod> steamAliasModIdToModMap = new HashMap<>();
     private HashMap<String, Mod> steamModIdToModMap = new HashMap<>();
     private HashMap<String, List<ReplacedByMod>> replacedByModIdToModMap = new HashMap<>();
     private Map<String, List<UserRuleDeclaration>> userRulesByMod = new HashMap<>();
     private Map<String, List<UserRuleDeclaration>> userRulesByTargetMod = new HashMap<>();
+    @Getter
+    private HashMap<String, SteamMod> steamMods = new HashMap<>();
 
     public static ModService get() {
         return CDI.current().select(ModService.class).get();
@@ -208,6 +216,10 @@ public class ModService {
         new EditModDependencyDialog(mod, allMods, userRulesByMod, userRulesByTargetMod);
     }
 
+    public void openEditUserModAliasesEditorDialog(Mod mod, String steamModId) {
+        new EditModAliasesDialog(mod, steamModId, allMods);
+    }
+
     @PreDestroy
     public void saveAll() {
         saveAllModsToDb();
@@ -269,6 +281,22 @@ public class ModService {
         reloadModsFromDirs();
     }
 
+    public void applyModAliases(HashMap<String, TreeSet<String>> modAliases) {
+        List<Mod> modifiedMods = new ArrayList<>(modAliases.size());
+        for (Mod mod : allMods.values()) {
+            TreeSet<String> currentModAliases = mod.getSteamAliasModIds();
+            TreeSet<String> newModAliases = modAliases.getOrDefault(mod.getId(), new TreeSet<>());
+            if (!currentModAliases.equals(newModAliases)) {
+                mod.setSteamAliasModIds(newModAliases);
+                modifiedMods.add(mod);
+            }
+        }
+
+        saveAllModsToDb();
+        log.info("Updated mod aliases for {} mods", modifiedMods.size());
+        reloadModsFromDirs();
+    }
+
     private UserModRuleRecord toUserModRuleRecord(UserRuleDeclaration userRule) {
         UserModRuleRecord record = new UserModRuleRecord();
         record.setId(userRule.getId());
@@ -294,6 +322,7 @@ public class ModService {
         modDbRecord.setSizeBytes(mod.getSize());
         SteamMod steamMod = mod.getSteamMod();
         modDbRecord.setSteamModId(steamMod.getSteamModId());
+        modDbRecord.setAliasSteamModIds(jsonConverter.toJson(mod.getSteamAliasModIds()));
 
         // save ignored dependencies if exist
         Set<String> ignoredDependenciesKeys = mod.getIgnoredDependenciesKeys();
@@ -311,8 +340,41 @@ public class ModService {
         return Optional.ofNullable(allMods.get(modId));
     }
 
+    public Optional<SteamMod> findSteamMod(String steamModId) {
+        return Optional.ofNullable(this.steamMods.get(steamModId));
+    }
+
+    public String getModTitle(String modId) {
+        Mod mod = findModById(modId).orElse(null);
+        if (mod == null) {
+            return modId;
+        }
+        if (StringUtils.isNotBlank(mod.getSteamMod().getSteamModName())) {
+            return mod.getSteamMod().getSteamModName();
+        }
+        if (StringUtils.isNotBlank(mod.getTitle())) {
+            return mod.getTitle();
+        }
+        return modId;
+    }
+
     public Optional<Mod> findModBySteamModId(String steamModId) {
-        return Optional.ofNullable(this.steamModIdToModMap.get(steamModId));
+        Mod mod = this.steamModIdToModMap.get(steamModId);
+        if (mod == null) { // try to find by alias
+            mod = this.steamAliasModIdToModMap.get(steamModId);
+        }
+        return Optional.ofNullable(mod);
+    }
+
+    public boolean isSteamModIdAliasUsed(String steamModId) {
+        return this.steamAliasModIdToModMap.containsKey(steamModId);
+    }
+
+    public Optional<SteamMod> findDirectSteamMod(String steamModId) {
+        if (isSteamModIdAliasUsed(steamModId)) {
+            return Optional.ofNullable(steamMods.get(steamModId));
+        }
+        return Optional.empty();
     }
 
     public void syncAllSteamMods() {
@@ -351,7 +413,7 @@ public class ModService {
     }
 
     public void onSteamModParsed(@ObservesAsync SteamMod steamMod) {
-        Mod mod = steamModIdToModMap.get(steamMod.getSteamModId());
+        Mod mod = findModBySteamModId(steamMod.getSteamModId()).orElse(null);
         if (mod == null) {
             return;
         }
@@ -496,7 +558,7 @@ public class ModService {
 
             SteamMod steamMod = mod.getSteamMod();
             for (SteamRequiredMod requiredSteamMod : steamMod.getRequiredSteamMods()) {
-                Mod resolvedSteamMod = steamModIdToModMap.get(requiredSteamMod.getSteamModId());
+                Mod resolvedSteamMod = findModBySteamModId(requiredSteamMod.getSteamModId()).orElse(null);
                 ModDeclaredDependency declaredDependency = new ModDeclaredDependency();
                 declaredDependency.setMod(mod.getId());
                 if (resolvedSteamMod == null) {
@@ -629,7 +691,7 @@ public class ModService {
     private boolean hasAllNotIgnoredSteamRequiredModsInfos(Mod mod) {
         SteamMod steamMod = mod.getSteamMod();
         for (var requiredSteamMod : steamMod.getRequiredSteamMods()) {
-            Mod requiredMod = steamModIdToModMap.get(requiredSteamMod.getSteamModId());
+            Mod requiredMod = findModBySteamModId(requiredSteamMod.getSteamModId()).orElse(null);
             if (requiredMod == null) {
                 if (!mod.getIgnoredDependenciesKeys().contains(mod.toIgnoredDependencyKey(
                         mod.getId(), DependencyType.REQUIRED, null, requiredSteamMod.getSteamModId()))) {
@@ -730,7 +792,7 @@ public class ModService {
     List<Mod> resolveRequiredSteamMods(SteamMod steamMod, LinkedHashMap<String, Mod> mods) {
         ArrayList<Mod> result = new ArrayList<>(steamMod.getRequiredSteamMods().size());
         for (SteamRequiredMod steamRequiredMod : steamMod.getRequiredSteamMods()) {
-            Mod requiredMod = steamModIdToModMap.get(steamRequiredMod.getSteamModId());
+            Mod requiredMod = findModBySteamModId(steamRequiredMod.getSteamModId()).orElse(null);
             if (requiredMod != null) {
                 result.add(requiredMod);
             }
@@ -1135,10 +1197,16 @@ public class ModService {
             } catch (Exception e) {
                 log.error("Failed to parse ignored dependencies from DB for Mod {}", mod.getId());
             }
-            mod.setSteamDbModId(modDbRecord.getSteamModId());
-            if (mod.getSteamDbModId() != null) {
-                mod.getSteamMod().setSteamModId(modDbRecord.getSteamModId());
+            if (mod.getSteamModIdByDirName() != null) {
+                mod.setSteamDbModId(mod.getSteamModIdByDirName());
+                mod.getSteamMod().setSteamModId(mod.getSteamModIdByDirName());
+            } else {
+                mod.setSteamDbModId(modDbRecord.getSteamModId());
+                if (mod.getSteamDbModId() != null) {
+                    mod.getSteamMod().setSteamModId(modDbRecord.getSteamModId());
+                }
             }
+            mod.setSteamAliasModIds(jsonConverter.parse(modDbRecord.getAliasSteamModIds(),  new TypeReference<>() {}));
             mod.setActive(modDbRecord.getIsActive());
             mod.setNewMod(modDbRecord.getIsNew());
         }
@@ -1152,7 +1220,7 @@ public class ModService {
 
     void fillSteamMods(Map<String, Mod> mods) {
         long start = System.currentTimeMillis();
-        Map<String, SteamMod> steamMods = steamService.findAllSteamMods();
+        HashMap<String, SteamMod> steamMods = steamService.findAllSteamMods();
         HashMap<String, Mod> steamModIdToModMap = new HashMap<>(steamMods.size());
         // build map from steamModId to mod
         for (Mod mod : mods.values()) {
@@ -1164,8 +1232,22 @@ public class ModService {
                 steamModIdToModMap.putIfAbsent(mod.getSteamMod().getSteamModId(), mod);
             }
         }
-        log.info("Filled steam mods info to {} mods in {}ms", steamModIdToModMap.size(), System.currentTimeMillis() - start);
+        // fill aliases as fallback
+
+        HashMap<String, Mod> steamAliasModIdToModMap = new HashMap<>();
+        for (Mod mod : mods.values()) {
+            for (String aliasModId : mod.getSteamAliasModIds()) {
+                if (!steamModIdToModMap.containsKey(aliasModId)) {
+                    steamAliasModIdToModMap.putIfAbsent(aliasModId, mod);
+                }
+            }
+        }
+
+        log.info("Filled steam mods info to {} mods and {} aliases in {}ms",
+                steamModIdToModMap.size(), steamAliasModIdToModMap.size(), System.currentTimeMillis() - start);
         this.steamModIdToModMap = steamModIdToModMap;
+        this.steamAliasModIdToModMap = steamAliasModIdToModMap;
+        this.steamMods = steamMods;
     }
 
     public void reloadModsFromDirs() {

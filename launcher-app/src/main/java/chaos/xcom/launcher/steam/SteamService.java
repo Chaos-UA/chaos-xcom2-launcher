@@ -129,10 +129,10 @@ public class SteamService {
         eventPublisher.publishAsync(new SteamSyncProgress(processedCount, totalCount));
     }
 
-    public Map<String, SteamMod> findAllSteamMods() {
+    public HashMap<String, SteamMod> findAllSteamMods() {
         Map<String, SteamModRecord> steamModDbMap = steamModRepository.findAll().stream()
                 .collect(Collectors.toMap(SteamModRecord::getId, v -> v));
-        Map<String, SteamMod> result = new HashMap<>(steamModDbMap.size());
+        HashMap<String, SteamMod> result = new HashMap<>(steamModDbMap.size());
         for (SteamModRecord dbRecord : steamModDbMap.values()) {
             SteamMod steamMod = new SteamMod();
             steamMod.setSteamModId(dbRecord.getId());

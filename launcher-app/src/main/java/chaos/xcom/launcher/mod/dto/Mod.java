@@ -28,6 +28,7 @@ public class Mod {
      * If not null then it will be used.
      */
     private String steamDbModId;
+    private TreeSet<String> steamAliasModIds = new TreeSet<>();
     /**
      * Parsed Steam ID from steam workshop directory.
      */

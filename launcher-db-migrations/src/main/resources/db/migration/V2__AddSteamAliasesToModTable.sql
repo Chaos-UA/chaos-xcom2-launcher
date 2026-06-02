@@ -1,0 +1,1 @@
+ALTER TABLE mod ADD COLUMN alias_steam_mod_ids TEXT NOT NULL DEFAULT '[]';

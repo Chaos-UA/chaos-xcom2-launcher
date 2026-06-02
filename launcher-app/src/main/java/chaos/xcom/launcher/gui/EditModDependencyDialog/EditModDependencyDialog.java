@@ -5,11 +5,11 @@ import chaos.xcom.launcher.mod.ModService;
 import chaos.xcom.launcher.mod.dto.Mod;
 import chaos.xcom.launcher.mod.rule.UserRuleDeclaration;
 import chaos.xcom.launcher.swing.SwingService;
+import chaos.xcom.launcher.util.AutoCompleteSupportUtils;
 import com.formdev.flatlaf.extras.components.FlatComboBox;
 import com.intellij.uiDesigner.core.GridConstraints;
 import com.intellij.uiDesigner.core.GridLayoutManager;
 import com.intellij.uiDesigner.core.Spacer;
-import org.jdesktop.swingx.autocomplete.AutoCompleteDecorator;
 
 import javax.swing.*;
 import java.awt.*;
@@ -138,15 +138,16 @@ public class EditModDependencyDialog extends JDialog {
                 UserRuleDeclaration rule = userRules.get(row);
                 int colIndex = 0;
                 FlatComboBox<String> cbMod = new FlatComboBox<>();
-                for (String modId : modIds) {
-                    cbMod.addItem(modId);
-                }
+                //for (String modId : modIds) {
+                //    cbMod.addItem(modId);
+                //}
                 cbMod.setEditable(false);
+                AutoCompleteSupportUtils.install(cbMod, modIds);
                 cbMod.setSelectedItem(rule.getModId());
                 cbMod.addActionListener(e -> {
                     rule.setModId((String) cbMod.getSelectedItem());
                 });
-                AutoCompleteDecorator.decorate(cbMod);
+
                 this.add(cbMod, new GridConstraints(row, colIndex++, 1, 1,
                         GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL,
                         GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW,
@@ -168,11 +169,12 @@ public class EditModDependencyDialog extends JDialog {
                         null, null, null, 0, false));
 
                 FlatComboBox<String> cbTargetMod = new FlatComboBox<>();
-                for (String modId : modIds) {
-                    cbTargetMod.addItem(modId);
-                }
+                //for (String modId : modIds) {
+                //    cbTargetMod.addItem(modId);
+                //}
+                AutoCompleteSupportUtils.install(cbTargetMod, modIds);
                 cbTargetMod.setSelectedItem(rule.getTargetModId());
-                AutoCompleteDecorator.decorate(cbTargetMod);
+                //AutoCompleteDecorator.decorate(cbTargetMod);
                 cbTargetMod.addActionListener(e -> {
                     rule.setTargetModId((String) cbTargetMod.getSelectedItem());
                 });

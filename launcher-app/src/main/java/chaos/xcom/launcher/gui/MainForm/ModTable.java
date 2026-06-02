@@ -81,24 +81,32 @@ public class ModTable extends XTable {
 
                 if (selectedMods.size() == 1) {
                     Mod mod = selectedMods.get(0);
-                    JMenuItem changeSteamModIdItem = new JMenuItem("Manually set Steam workshop mod ID");
-                    changeSteamModIdItem.addActionListener(ae -> {
-                        String input = JOptionPane.showInputDialog(SwingService.getLastActiveWindowBounds(),
-                                "Please enter correct Steam workshop mod ID.\nEmpty means reset to default",
-                                mod.getSteamMod().getSteamModId());
-                        if (input == null) {
-                            return;
-                        }
-                        getModService().setSteamModId(mod, input);
-                    });
-                    menu.add(changeSteamModIdItem);
+                    if (mod.getSteamModIdByDirName() == null) {
+                        JMenuItem changeSteamModIdItem = new JMenuItem("Manually set Steam workshop mod ID");
+                        changeSteamModIdItem.addActionListener(ae -> {
+                            String input = JOptionPane.showInputDialog(SwingService.getLastActiveWindowBounds(),
+                                    "Please enter correct Steam workshop mod ID.\nEmpty means reset to default",
+                                    mod.getSteamMod().getSteamModId());
+                            if (input == null) {
+                                return;
+                            }
+                            getModService().setSteamModId(mod, input);
+                        });
+                        menu.add(changeSteamModIdItem);
+                        menu.addSeparator();
+                    }
 
-                    menu.addSeparator();
                     JMenuItem editUserModRules = new JMenuItem("Edit user mod rules");
                     editUserModRules.addActionListener(ae -> {
                         getModService().openUserModRulesEditorDialog(mod);
                     });
                     menu.add(editUserModRules);
+
+                    JMenuItem modifyAliasSteamModIdItem = new JMenuItem("Edit Steam ID aliases");
+                    modifyAliasSteamModIdItem.addActionListener(ae -> {
+                        getModService().openEditUserModAliasesEditorDialog(mod, null);
+                    });
+                    menu.add(modifyAliasSteamModIdItem);
                     menu.addSeparator();
                 }
 
