@@ -127,20 +127,21 @@ public class ModTable extends XTable {
                     });
                     menu.add(syncSteamMod);
 
-                    // remove deleted mod from list
-                    List<Mod> deletedMods = modsWithSteamId.stream()
-                            .filter(mod -> !mod.isExist())
-                            .toList();
 
-                    if (!deletedMods.isEmpty()) {
-                        JMenuItem removeDeletedMods = new JMenuItem("Remove deleted mod from list");
-                        removeDeletedMods.addActionListener(ae -> {
-                            ModService modService = getModService();
-                            modService.removeDeletedMods(deletedMods);
-                        });
-                        menu.add(removeDeletedMods);
-                    }
+                }
 
+                // remove deleted mod from list
+                List<Mod> deletedMods = selectedMods.stream()
+                        .filter(mod -> !mod.isExist())
+                        .toList();
+
+                if (!deletedMods.isEmpty()) {
+                    JMenuItem removeDeletedMods = new JMenuItem("Remove deleted mod from list");
+                    removeDeletedMods.addActionListener(ae -> {
+                        ModService modService = getModService();
+                        modService.removeDeletedMods(deletedMods);
+                    });
+                    menu.add(removeDeletedMods);
                 }
                 menu.show(e.getComponent(), e.getX(), e.getY());
             }

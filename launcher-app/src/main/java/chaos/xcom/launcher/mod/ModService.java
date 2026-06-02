@@ -249,9 +249,10 @@ public class ModService {
     public void calculateAllModsSizeAndSave() {
         for (Mod mod : getAllModsIncludingIgnoredDuplicates()) {
             mod.setSize(FileUtils.calculateDirectorySize(mod.getDirectory()).orElse(null));
+            mod.setLastModifiedAt(FileUtils.getLastModifiedFileInDirectory(mod.getDirectory()).orElse(null));
         }
         saveAllModsToDb();
-        log.info("All {} mods size have been calculated and saved to DB", allMods.size());
+        log.info("All {} mods size and last modification time have been calculated and saved to DB", allMods.size());
         mainForm.onMainTableDataChange();
     }
 
@@ -320,6 +321,7 @@ public class ModService {
         modDbRecord.setIsNew(mod.isNewMod());
         modDbRecord.setDirectory(mod.getDirectory().getAbsolutePath());
         modDbRecord.setSizeBytes(mod.getSize());
+        modDbRecord.setModifiedAt(mod.getLastModifiedAt());
         SteamMod steamMod = mod.getSteamMod();
         modDbRecord.setSteamModId(steamMod.getSteamModId());
         modDbRecord.setAliasSteamModIds(jsonConverter.toJson(mod.getSteamAliasModIds()));
@@ -1189,6 +1191,7 @@ public class ModService {
             } else {
                 if (new File(modDbRecord.getDirectory()).equals(mod.getDirectory())) {
                     mod.setSize(modDbRecord.getSizeBytes());
+                    mod.setLastModifiedAt(modDbRecord.getModifiedAt());
                 }
             }
             try {

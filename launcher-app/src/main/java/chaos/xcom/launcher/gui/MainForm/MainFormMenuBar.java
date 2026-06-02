@@ -30,7 +30,7 @@ public class MainFormMenuBar extends JMenuBar {
 
         fileMenu.addSeparator();
 
-        JMenuItem calculateModsSize = new JMenuItem("Calculate mods size");
+        JMenuItem calculateModsSize = new JMenuItem("Calculate mods size and last modified time");
         calculateModsSize.addActionListener(e -> {
             modService.get().calculateAllModsSizeAndSave();
         });

@@ -7,7 +7,11 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.util.Comparator;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 @Slf4j
 public class FileUtils {
@@ -29,6 +33,34 @@ public class FileUtils {
             return Optional.empty();
         }
         return calculateDirectorySize(file.toPath());
+    }
+
+    /**
+     * @param file directory.
+     * @return latest modified datetime of file inside the directory recursively.
+     */
+    public static Optional<Instant> getLastModifiedFileInDirectory(File file) {
+        if (!file.isDirectory()) {
+            return Optional.empty();
+        }
+
+        try (Stream<Path> stream = Files.walk(file.toPath())) {
+            return stream
+                    .filter(Files::isRegularFile)
+                    .map(p -> {
+                        try {
+                            return Files.getLastModifiedTime(p).toInstant();
+                        } catch (Exception e) {
+                            log.error("Failed to get last modified time for file: {}", p, e);
+                            return null;
+                        }
+                    })
+                    .filter(Objects::nonNull)
+                    .max(Comparator.naturalOrder());
+        } catch (Exception e) {
+            log.error("Failed to walk directory to determine last modified file: {}", file, e);
+            return Optional.empty();
+        }
     }
 
     public static Optional<Long> calculateDirectorySize(Path path)  {

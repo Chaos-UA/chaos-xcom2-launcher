@@ -10,6 +10,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
+import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -43,6 +44,7 @@ public class Mod {
      * Mod directory size in bytes.
      */
     private Long size;
+    private Instant lastModifiedAt;
     private File directory;
     private TreeSet<ModStatus> statuses = new TreeSet<>();
     /**

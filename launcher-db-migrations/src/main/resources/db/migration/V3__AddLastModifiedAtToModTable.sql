@@ -1,0 +1,1 @@
+ALTER TABLE mod ADD COLUMN modified_at TIMESTAMP NULL;

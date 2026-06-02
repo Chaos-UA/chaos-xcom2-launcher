@@ -83,6 +83,13 @@ public class ModTableModel extends XTableModel<Mod> {
                         return DateUtils.format(v.getSteamMod().getUpdatedAt());
                     }
                 }),
+                new TableColumn<>("Modified at", String.class, (Mod v) -> {
+                    if (v.getLastModifiedAt() == null) {
+                        return "?";
+                    } else {
+                        return DateUtils.format(v.getLastModifiedAt());
+                    }
+                }),
                 new TableColumn<>("WOTC", Boolean.class, Mod::isRequiresXPACK, new Function<Boolean, String>() {
                     @Override
                     public String apply(Boolean forWotc) {
