@@ -31,6 +31,9 @@ public class CommunityHighlanderUtils {
 
     static List<File> findAllXcomGameIniFiles(File modConfigDir) {
         try {
+            if (!modConfigDir.isFile()) {
+                return List.of();
+            }
             return Files.walk(modConfigDir.toPath(), MAX_RECURSION_DIRS_DEPTH)
                     .filter(Files::isRegularFile)
                     .filter(path -> XCOM_GAME_INI_FILE_NAME.equals(path.getFileName().toString()))
