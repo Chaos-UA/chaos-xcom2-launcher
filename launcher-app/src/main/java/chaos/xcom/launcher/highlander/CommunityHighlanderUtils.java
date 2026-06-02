@@ -31,9 +31,6 @@ public class CommunityHighlanderUtils {
 
     static List<File> findAllXcomGameIniFiles(File modConfigDir) {
         try {
-            if (!modConfigDir.isFile()) {
-                return List.of();
-            }
             return Files.walk(modConfigDir.toPath(), MAX_RECURSION_DIRS_DEPTH)
                     .filter(Files::isRegularFile)
                     .filter(path -> XCOM_GAME_INI_FILE_NAME.equals(path.getFileName().toString()))
@@ -47,8 +44,8 @@ public class CommunityHighlanderUtils {
     }
 
     public static HighlanderModsConfig parseHighlanderAllXComGameIniFromModDir(String mod, File modDir) {
-        File configDir = new File(modDir + "/Config");
-        List<File> xcomGameIniFiles = findAllXcomGameIniFiles(configDir);
+        //File configDir = new File(modDir + "/Config");
+        List<File> xcomGameIniFiles = findAllXcomGameIniFiles(modDir);
         HighlanderModsConfig combinedConfig = new HighlanderModsConfig();
         for (File xcomGameIni : xcomGameIniFiles) {
             HighlanderModsConfig config = parseHighlanderXComGameIni(mod, xcomGameIni);
