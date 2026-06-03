@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -26,6 +27,20 @@ public class FileUtils {
 
     public static File getDefaultXCom2UserDir() {
         return new File(USER_HOME + "/Documents/My Games/XCOM2 War of the Chosen");
+    }
+
+    public static List<File> listFilesEndingWith(File directory, String extensionSuffix) {
+        try {
+            String extensionSuffixLowerCase = extensionSuffix.toLowerCase();
+            return Files.walk(directory.toPath())
+                    .filter(v -> Files.isRegularFile(v)
+                            && v.getFileName().toString().toLowerCase().endsWith(extensionSuffixLowerCase))
+                    .map(Path::toFile)
+                    .toList();
+        } catch (Exception e) {
+            log.error("Failed to list files in directory: {}", directory, e);
+            return List.of();
+        }
     }
 
     public static Optional<Long> calculateDirectorySize(File file) {

@@ -47,6 +47,10 @@
                     <children>
                       <component id="d0bed" class="chaos.xcom.launcher.gui.MainForm.ModTable" binding="tblModsList">
                         <constraints/>
+                        <properties/>
+                        <clientProperties>
+                          <terminateEditOnFocusLost class="java.lang.Boolean" value="true"/>
+                        </clientProperties>
                       </component>
                     </children>
                   </scrollpane>
@@ -144,21 +148,37 @@
                                   </component>
                                 </children>
                               </scrollpane>
-                              <scrollpane id="cfae8" class="chaos.xcom.launcher.gui.component.XScrollPane" binding="spXcomGameIni">
+                              <grid id="ca7a4" layout-manager="GridLayoutManager" row-count="2" column-count="1" same-size-horizontally="false" same-size-vertically="false" hgap="-1" vgap="-1">
+                                <margin top="0" left="0" bottom="0" right="0"/>
                                 <constraints>
-                                  <tabbedpane title="XComGame.ini"/>
+                                  <tabbedpane title=".ini files"/>
                                 </constraints>
                                 <properties/>
                                 <border type="none"/>
                                 <children>
-                                  <component id="156d3" class="com.formdev.flatlaf.extras.components.FlatEditorPane" binding="epXcomGameIni">
-                                    <constraints/>
-                                    <properties>
-                                      <editable value="false"/>
-                                    </properties>
+                                  <scrollpane id="cfae8" class="chaos.xcom.launcher.gui.component.XScrollPane" binding="spXcomGameIni">
+                                    <constraints>
+                                      <grid row="1" column="0" row-span="1" col-span="1" vsize-policy="7" hsize-policy="7" anchor="0" fill="3" indent="0" use-parent-layout="false"/>
+                                    </constraints>
+                                    <properties/>
+                                    <border type="none"/>
+                                    <children>
+                                      <component id="156d3" class="com.formdev.flatlaf.extras.components.FlatEditorPane" binding="epXcomGameIni">
+                                        <constraints/>
+                                        <properties>
+                                          <editable value="false"/>
+                                        </properties>
+                                      </component>
+                                    </children>
+                                  </scrollpane>
+                                  <component id="53f7a" class="com.formdev.flatlaf.extras.components.FlatComboBox" binding="cbIniFiles">
+                                    <constraints>
+                                      <grid row="0" column="0" row-span="1" col-span="1" vsize-policy="3" hsize-policy="7" anchor="1" fill="1" indent="0" use-parent-layout="false"/>
+                                    </constraints>
+                                    <properties/>
                                   </component>
                                 </children>
-                              </scrollpane>
+                              </grid>
                             </children>
                           </tabbedpane>
                         </children>
