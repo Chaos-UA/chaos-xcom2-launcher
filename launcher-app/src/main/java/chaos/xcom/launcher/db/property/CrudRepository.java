@@ -5,6 +5,7 @@ import lombok.Getter;
 import org.apache.commons.collections4.CollectionUtils;
 import org.jooq.*;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -77,12 +78,28 @@ public abstract class CrudRepository<T extends UpdatableRecord<?>, ID> {
         if (CollectionUtils.isEmpty(records)) {
             return 0;
         }
-        return dsl.insertInto(table)
-                .columns(table.fields())
-                .valuesOfRecords(records)
-                .onDuplicateKeyUpdate()
-                .setAllToExcluded()
-                .execute();
+
+        int batchSize = 50;
+        int totalAffectedRows = 0;
+
+        // Convert to a List to safely use subList (in case a Set or other Collection was passed)
+        List<T> recordList = new ArrayList<>(records);
+        // saving 400 steam mods throwed too long sql, thus do in batches
+        for (int i = 0; i < recordList.size(); i += batchSize) {
+            // Calculate the end index safely to prevent IndexOutOfBoundsException
+            int endIndex = Math.min(i + batchSize, recordList.size());
+            List<T> batch = recordList.subList(i, endIndex);
+
+            // Execute the jOOQ insert for this specific batch and add to the total count
+            totalAffectedRows += dsl.insertInto(table)
+                    .columns(table.fields())
+                    .valuesOfRecords(batch)
+                    .onDuplicateKeyUpdate()
+                    .setAllToExcluded()
+                    .execute();
+        }
+
+        return totalAffectedRows;
     }
 
     public ID insertAndGetId(T record) {

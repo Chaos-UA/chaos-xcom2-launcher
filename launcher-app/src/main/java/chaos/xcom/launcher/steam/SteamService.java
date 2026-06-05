@@ -7,6 +7,7 @@ import chaos.xcom.launcher.event.EventPublisher;
 import chaos.xcom.launcher.exception.InternalException;
 import chaos.xcom.launcher.steam.SteamMod.SteamRequiredMod;
 import chaos.xcom.launcher.swing.SwingService;
+import chaos.xcom.launcher.util.Longs;
 import chaos.xcom.launcher.util.OsUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import jakarta.annotation.PostConstruct;
@@ -52,15 +53,16 @@ public class SteamService {
     private static Pattern MOD_ID_PATTERN = Pattern.compile("/filedetails/\\?id=(\\d+)");
 
     private final EventPublisher eventPublisher;
+    private final SteamClient steamClient;
 
     // Tracks uniqueness
-    private final Set<String> pendingStreamIds = ConcurrentHashMap.newKeySet();
+    private final Set<Long> pendingStreamIds = ConcurrentHashMap.newKeySet();
 
     private final AtomicInteger errorsCount = new AtomicInteger(0);
     private final AtomicInteger totalProcessedItems = new AtomicInteger(0);
 
     // Queue for processing
-    private final BlockingQueue<String> queueSteamIds = new LinkedBlockingQueue<>();
+    private final BlockingQueue<Long> queueSteamIds = new LinkedBlockingQueue<>();
     private final SteamModRepository steamModRepository;
     private final JsonConverter jsonConverter;
     private final DbProperties dbProperties;
@@ -70,7 +72,7 @@ public class SteamService {
     public void init() {
         Thread.ofVirtual().start(() -> {
             while (true) {
-                String steamModId = null;
+                Long steamModId = null;
                 try {
                     steamModId = null;
                     publishSteamSyncProgress();
@@ -107,13 +109,13 @@ public class SteamService {
         });
     }
 
-    public static void openSteamModInBrowser(String steamModId) {
+    public static void openSteamModInBrowser(Long steamModId) {
         openSteamModsInBrowser(List.of(steamModId));
     }
 
-    public static void openSteamModsInBrowser(Collection<String> steamModIds) {
+    public static void openSteamModsInBrowser(Collection<Long> steamModIds) {
         try {
-            for (String steamModId : steamModIds) {
+            for (Long steamModId : steamModIds) {
                 if (steamModId != null) {
                     Desktop.getDesktop().browse(new URI("https://steamcommunity.com/sharedfiles/filedetails/?id=" + steamModId));
                 }
@@ -129,20 +131,20 @@ public class SteamService {
         eventPublisher.publishAsync(new SteamSyncProgress(processedCount, totalCount));
     }
 
-    public HashMap<String, SteamMod> findAllSteamMods() {
-        Map<String, SteamModRecord> steamModDbMap = steamModRepository.findAll().stream()
-                .collect(Collectors.toMap(SteamModRecord::getId, v -> v));
-        HashMap<String, SteamMod> result = new HashMap<>(steamModDbMap.size());
+    public HashMap<Long, SteamMod> findAllSteamMods() {
+        Map<Long, SteamModRecord> steamModDbMap = steamModRepository.findAll().stream()
+                .collect(Collectors.toMap(v -> Long.parseLong(v.getId()), v -> v));
+        HashMap<Long, SteamMod> result = new HashMap<>(steamModDbMap.size());
         for (SteamModRecord dbRecord : steamModDbMap.values()) {
             SteamMod steamMod = new SteamMod();
-            steamMod.setSteamModId(dbRecord.getId());
+            steamMod.setSteamModId(Long.parseLong(dbRecord.getId()));
             steamMod.setSteamModName(dbRecord.getTitle());
             steamMod.setDescription(dbRecord.getDescription());
             steamMod.setUpdatedAt(dbRecord.getUpdatedAt());
             try {
-                List<String> requiredModIds = jsonConverter.parse(dbRecord.getRequiredSteamModIds(), new TypeReference<>() {});
+                List<Long> requiredModIds = jsonConverter.parse(dbRecord.getRequiredSteamModIds(), new TypeReference<>() {});
                 if (requiredModIds != null) {
-                    for (String requiredModId : requiredModIds) {
+                    for (Long requiredModId : requiredModIds) {
                         SteamRequiredMod requiredMod = new SteamRequiredMod();
                         requiredMod.setSteamModId(requiredModId);
                         SteamModRecord requiredDbRecord = steamModDbMap.get(requiredModId);
@@ -158,12 +160,93 @@ public class SteamService {
         return result;
     }
 
-    public void SyncSteamModsInAsync(List<String> steamModIds) {
+    public void syncSteamModsInAsync(List<Long> steamModIds) {
         if (steamModIds.isEmpty()) {
             return;
         }
-        log.info("Sync steam mods: {}", steamModIds.size() <= 10 ? steamModIds : steamModIds.size());
-        for (String steamModId : steamModIds) {
+        if (steamClient.isWorking()) {
+            Thread.ofVirtual().start(() -> {
+                log.info("Sync steam mods: {}", steamModIds.size() <= 10 ? steamModIds : steamModIds.size());
+                syncSteamModsViaSteamApi(steamModIds);
+            });
+        } else {
+            syncSteamModsViaHtmlParsingAsync(steamModIds);
+        }
+    }
+
+    private SteamModRecord toDbRecord(SteamClient.SteamModQueryResult result) {
+        SteamModRecord dbSteamMod = new SteamModRecord();
+        dbSteamMod.setId(Longs.toString(result.getSteamModId()));
+        dbSteamMod.setTitle(result.getTitle());
+        dbSteamMod.setDescription(steamBBToHtml(result.getDescription()));
+        dbSteamMod.setUpdatedAt(result.getUpdatedAt());
+        dbSteamMod.setRequiredSteamModIds(jsonConverter.toJson(result.getChildIds()));
+        return dbSteamMod;
+    }
+
+    private void syncSteamModsViaSteamApi(List<Long> steamModIds) {
+        long startTime = System.currentTimeMillis();
+        try {
+            int maxBatchSize = SteamClient.MAX_PAGE_SIZE;
+
+            // Loop through the entire list, stepping by 1000 each time
+            HashSet<Long> syncedIds = new HashSet<>();
+            HashSet<Long> childIds = new HashSet<>();
+            int count = 0;
+            eventPublisher.publishAsync(new SteamSyncProgress(count, steamModIds.size()));
+            for (int i = 0; i < steamModIds.size(); i += maxBatchSize) {
+
+                // 1. Safely slice the list. Math.min prevents IndexOutOfBounds on the final, smaller chunk
+                int endIndex = Math.min(i + maxBatchSize, steamModIds.size());
+                List<Long> batchIds = steamModIds.subList(i, endIndex);
+
+                // 2. Fetch data from Steam API for just this batch
+                List<SteamClient.SteamModQueryResult> results = steamClient.getSteamModsInfo(batchIds, true, true).get();
+
+                // 3. Convert to database records
+                List<SteamModRecord> records = results.stream().map(this::toDbRecord).toList();
+
+                // 4. Save this specific batch to the database
+                steamModRepository.save(records);
+                syncedIds.addAll(batchIds);
+                for (SteamClient.SteamModQueryResult result : results) {
+                    childIds.addAll(result.getChildIds());
+                }
+
+                count += steamModIds.size();
+                int totalCount = steamModIds.size();
+                eventPublisher.publishAsync(new SteamSyncProgress(count, totalCount));
+                log.info("Processed steam mods batch: {} / {}", count, totalCount);
+            }
+
+            Set<Long> childIdsToSync = childIds.stream().filter(id -> !syncedIds.contains(id))
+                    .collect(Collectors.toSet());
+            if (childIdsToSync.size() > 0) {
+                int processedCount = 0;
+                int totalCount = childIdsToSync.size();
+                eventPublisher.publishAsync(new SteamSyncProgress(processedCount, totalCount));
+
+                // 2. Fetch data from Steam API for just this batch
+                List<SteamClient.SteamModQueryResult> results = steamClient.getSteamModsInfo(childIdsToSync, false, true).get();
+
+                // 3. Convert to database records
+                List<SteamModRecord> records = results.stream().map(this::toDbRecord).toList();
+
+                // 4. Save this specific batch to the database
+                steamModRepository.save(records);
+
+                processedCount= childIdsToSync.size();
+            }
+            eventPublisher.publishAsync(new SteamSyncProgress(0, 0));
+        } catch (Exception e) {
+            log.error("Error processing steam mods {}. Fallback to parsing", steamModIds.size(), e);
+            syncSteamModsViaHtmlParsingAsync(steamModIds);
+        }
+        log.info("Finished processing steam mods {} in {} ms", steamModIds.size(), System.currentTimeMillis() - startTime);
+    }
+
+    private void syncSteamModsViaHtmlParsingAsync(Collection<Long> steamModIds) {
+        for (Long steamModId : steamModIds) {
             appendSteamModForSync(steamModId);
         }
     }
@@ -172,24 +255,24 @@ public class SteamService {
      * Process a single steam mod
      * @return true if processed successfully, false otherwise.
      */
-    private boolean processSteamMod(String steamModId) {
-        SteamMod steamMod = parseSteamMod(steamModId).orElse(null);
+    private boolean processSteamMod(Long steamModId) {
+        SteamMod steamMod = parseSteamModHtml(steamModId).orElse(null);
         if (steamMod == null) {
             log.error("Failed to parse steam mod {}", steamModId);
             return false;
         } else {
             SteamModRecord dbSteamMod = new SteamModRecord();
-            dbSteamMod.setId(steamMod.getSteamModId());
+            dbSteamMod.setId(Longs.toString(steamMod.getSteamModId()));
             dbSteamMod.setTitle(steamMod.getSteamModName());
             dbSteamMod.setDescription(steamMod.getDescription());
             dbSteamMod.setUpdatedAt(steamMod.getUpdatedAt());
-            List<String> requiredModIds = steamMod.getRequiredSteamMods().stream().map(SteamRequiredMod::getSteamModId).toList();
+            List<Long> requiredModIds = steamMod.getRequiredSteamMods().stream().map(SteamRequiredMod::getSteamModId).toList();
             dbSteamMod.setRequiredSteamModIds(jsonConverter.toJson(requiredModIds));
             steamModRepository.save(dbSteamMod);
 
             steamModRepository.saveTitle(steamMod.getRequiredSteamMods().stream().map(v -> {
                 SteamModRecord requiredSteamMod = new SteamModRecord();
-                requiredSteamMod.setId(v.getSteamModId());
+                requiredSteamMod.setId(Longs.toString(v.getSteamModId()));
                 requiredSteamMod.setTitle(v.getSteamModName());
                 return requiredSteamMod;
             }).toList());
@@ -199,7 +282,7 @@ public class SteamService {
         }
     }
 
-    private void appendSteamModForSync(String steamModId) {
+    private void appendSteamModForSync(Long steamModId) {
         if (pendingStreamIds.add(steamModId)) {
             try {
                 queueSteamIds.add(steamModId);
@@ -210,11 +293,11 @@ public class SteamService {
         }
     }
 
-    public static String formatModPageUrl(String modId) {
+    public static String formatModPageUrl(long modId) {
         return "https://steamcommunity.com/workshop/filedetails/?id=" + modId;
     }
 
-    public Optional<SteamMod> parseSteamMod(String steamModId) {
+    Optional<SteamMod> parseSteamModHtml(Long steamModId) {
         try {
             long startTime = System.currentTimeMillis();
             if (startTime - LAST_STEAM_TOO_MANY_REQUESTS_ERROR_AT.toEpochMilli() < TOO_MANY_REQUESTS_SKIP_TIMEOUT_MS) {
@@ -271,7 +354,7 @@ public class SteamService {
                             String requiredModId = matcher.group(1).strip(); // returns the numeric ID
 
                             SteamRequiredMod requiredMod = new SteamRequiredMod();
-                            requiredMod.setSteamModId(requiredModId);
+                            requiredMod.setSteamModId(Longs.parseLong(requiredModId));
                             requiredMod.setSteamModName(name);
                             steamMod.getRequiredSteamMods().add(requiredMod);
                         }
@@ -325,4 +408,88 @@ public class SteamService {
         return Optional.empty();
     }
 
+    public static String steamBBToHtml(String bbcode) {
+        if (bbcode == null || bbcode.isEmpty()) {
+            return bbcode;
+        }
+
+        String html = bbcode;
+
+        // 1. Headers
+        html = html.replaceAll("(?i)\\[h1\\](.*?)\\[/h1\\]", "<h1>$1</h1>");
+        html = html.replaceAll("(?i)\\[h2\\](.*?)\\[/h2\\]", "<h2>$1</h2>");
+        html = html.replaceAll("(?i)\\[h3\\](.*?)\\[/h3\\]", "<h3>$1</h3>");
+
+        // 2. Text Formatting
+        html = html.replaceAll("(?i)\\[b\\](.*?)\\[/b\\]", "<strong>$1</strong>");
+        html = html.replaceAll("(?i)\\[i\\](.*?)\\[/i\\]", "<em>$1</em>");
+        html = html.replaceAll("(?i)\\[u\\](.*?)\\[/u\\]", "<u>$1</u>");
+        html = html.replaceAll("(?i)\\[strike\\](.*?)\\[/strike\\]", "<del>$1</del>");
+        html = html.replaceAll("(?i)\\[spoiler\\](.*?)\\[/spoiler\\]", "<span class=\"spoiler\">$1</span>");
+
+        // 3. Quotes (Using ?is to match across multiple lines)
+        // Matches [quote=Author]Text[/quote]
+        html = html.replaceAll("(?is)\\[quote=(.*?)\\](.*?)\\[/quote\\]", "<blockquote><strong>$1:</strong><br>$2</blockquote>");
+        // Matches standard [quote]Text[/quote]
+        html = html.replaceAll("(?is)\\[quote\\](.*?)\\[/quote\\]", "<blockquote>$1</blockquote>");
+
+        // 4. Code Blocks & Horizontal Rules
+        html = html.replaceAll("(?is)\\[code\\](.*?)\\[/code\\]", "<pre><code>$1</code></pre>");
+        html = html.replaceAll("(?i)\\[hr\\]\\[/hr\\]", "<hr>");
+
+        // 5. Links / URLs
+        html = html.replaceAll("(?i)\\[url=(.*?)\\](.*?)\\[/url\\]", "<a href=\"$1\" target=\"_blank\" rel=\"noopener noreferrer\">$2</a>");
+        html = html.replaceAll("(?i)\\[url\\](.*?)\\[/url\\]", "<a href=\"$1\" target=\"_blank\" rel=\"noopener noreferrer\">$1</a>");
+
+        // 6. Lists
+        html = html.replaceAll("(?is)\\[\\*\\](.*?)(?=\\[\\*\\]|\\[/list\\])", "<li>$1</li>");
+        html = html.replaceAll("(?i)\\[list\\]", "<ul>");
+        html = html.replaceAll("(?i)\\[/list\\]", "</ul>");
+
+        // 7. Line Breaks
+        html = html.replaceAll("\r\n|\n", "<br>");
+
+        return html;
+    }
+
+    public void downloadSteamModsAsync(List<Long> steamModIdsToDownload) {
+        Thread.ofVirtual().start(() -> {
+            try {
+                log.info("Downloading steam mods: {}", steamModIdsToDownload.size());
+                int i = 0;
+                for (long steamModId : steamModIdsToDownload) {
+                    eventPublisher.publishAsync(new SteamSyncProgress(i, steamModIdsToDownload.size()));
+                    steamClient.downloadSteamMod(steamModId, true);
+                }
+                eventPublisher.publishAsync(new SteamSyncProgress(0, 0));
+                log.info("Finished downloading steam mods: {}", steamModIdsToDownload.size());
+                syncSteamModsViaSteamApi(steamModIdsToDownload);
+            } catch (Exception e) {
+                log.error("Error downloading steam mods {}", steamModIdsToDownload.size(), e);
+            }
+        });
+
+    }
+
+    public void subscribeSteamMods(List<Long> steamModIdsToSubscribe) {
+        for (long steamModId : steamModIdsToSubscribe) {
+            try {
+                steamClient.subscribeSteamMod(steamModId).get();
+                log.info("Subscribed to steam mod {}", steamModId);
+            } catch (Exception e) {
+                log.error("Error subscribing to steam mod {}", steamModId, e);
+            }
+        }
+    }
+
+    public void unsubscribeSteamMods(List<Long> steamModIdsToUnsubscribe) {
+        for (long steamModId : steamModIdsToUnsubscribe) {
+            try {
+                steamClient.unsubscribeSteamMod(steamModId).get();
+                log.info("Unsubscribed from steam mod {}", steamModId);
+            } catch (Exception e) {
+                log.error("Error unsubscribing from steam mod {}", steamModId, e);
+            }
+        }
+    }
 }

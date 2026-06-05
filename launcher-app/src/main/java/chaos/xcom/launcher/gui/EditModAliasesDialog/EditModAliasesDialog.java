@@ -30,17 +30,17 @@ public class EditModAliasesDialog extends JDialog {
     private JButton btnAddAlias;
     private final List<ModAlias> modsAliases;
     private final Collection<String> modIds;
-    private final TreeSet<String> steamModIds;
+    private final TreeSet<Long> steamModIds;
     private final Map<String, Mod> mods;
     private final PanelRules panelRules;
     private final JPanel pnlRules;
     private final ModService modService = ModService.get();
 
-    private List<ModAlias> buildModsAliases(Mod selectedMod, String selectedSteamModId, Map<String, Mod> mods) {
+    private List<ModAlias> buildModsAliases(Mod selectedMod, Long selectedSteamModId, Map<String, Mod> mods) {
         List<ModAlias> result = new ArrayList<>(mods.size() + 1);
 
         for (Mod mod : mods.values()) {
-            for (String aliasModId : mod.getSteamAliasModIds()) {
+            for (Long aliasModId : mod.getSteamAliasModIds()) {
                 result.add(new ModAlias(mod.getId(), aliasModId));
             }
         }
@@ -70,7 +70,7 @@ public class EditModAliasesDialog extends JDialog {
         return result;
     }
 
-    public EditModAliasesDialog(Mod selectedMod, String selectedSteamModId, Map<String, Mod> mods) {
+    public EditModAliasesDialog(Mod selectedMod, Long selectedSteamModId, Map<String, Mod> mods) {
         String selectedModId = selectedMod == null ? null : selectedMod.getId();
         this.mods = mods;
         this.modIds = mods.keySet();
@@ -127,7 +127,7 @@ public class EditModAliasesDialog extends JDialog {
 
     private void onOK() {
         // add your code here
-        HashMap<String, TreeSet<String>> modAliases = new HashMap<>();
+        HashMap<String, TreeSet<Long>> modAliases = new HashMap<>();
         for (ModAlias modAlias : modsAliases) {
             modAliases.computeIfAbsent(modAlias.modId, k -> new TreeSet<>())
                     .add(modAlias.getAliasSteamModId());
@@ -230,8 +230,8 @@ public class EditModAliasesDialog extends JDialog {
                         null, null, null, 0, false));
 
                 EventList<ModAliasItem> items = GlazedLists.eventListOf();
-                for (String modId : steamModIds) {
-                    String displayValue = modId;
+                for (Long modId : steamModIds) {
+                    String displayValue = modId.toString();
 
                     SteamMod mod = modService.findSteamMod(modId).orElse(null);
                     if (mod != null && StringUtils.isNotBlank(mod.getSteamModName())) {
@@ -244,7 +244,7 @@ public class EditModAliasesDialog extends JDialog {
                 FlatComboBox<ModAliasItem> cbTargetMod = new FlatComboBox<>();
                 cbTargetMod.setEditable(false);
                 cbTargetMod.setPrototypeDisplayValue(
-                        new ModAliasItem("9999999999", "MMMMMMMMMMMMMMMMM"));
+                        new ModAliasItem(9999999999L, "MMMMMMMMMMMMMMMMM"));
                 AutoCompleteSupportUtils.install(cbTargetMod, items);
 
                 for (ModAliasItem item : items) {
@@ -295,13 +295,13 @@ public class EditModAliasesDialog extends JDialog {
     @AllArgsConstructor
     static class ModAlias {
         private String modId;
-        private String aliasSteamModId;
+        private Long aliasSteamModId;
     }
 
     @Data
     @AllArgsConstructor
     static class ModAliasItem {
-        private final String steamModId;
+        private final Long steamModId;
         private final String displayValue;
 
         public String toString() {

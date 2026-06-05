@@ -403,7 +403,7 @@
                       <grid row="0" column="1" row-span="1" col-span="1" vsize-policy="3" hsize-policy="3" anchor="8" fill="0" indent="0" use-parent-layout="false"/>
                     </constraints>
                     <properties>
-                      <toolTipText value="Steam may return 429 (too many requests) error if requests done too often"/>
+                      <toolTipText value="Used only as fallback when Steam for some reason is not running &#10;to parse mods info and required mods from HTML page and is very slow.&#10;Steam may return 429 (too many requests) error if requests done too often via fallback."/>
                     </properties>
                   </component>
                   <component id="c467e" class="javax.swing.JLabel">
@@ -412,7 +412,7 @@
                     </constraints>
                     <properties>
                       <text value="Steam mod sync request delay in seconds"/>
-                      <toolTipText value="Steam may return 429 (too many requests) error if requests done too often"/>
+                      <toolTipText value="Used only as fallback when Steam for some reason is not running &#10;to parse mods info and required mods from HTML page and is very slow.&#10;Steam may return 429 (too many requests) error if requests done too often via fallback."/>
                     </properties>
                   </component>
                 </children>

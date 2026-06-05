@@ -8,6 +8,7 @@ import chaos.xcom.launcher.mod.dto.*;
 import chaos.xcom.launcher.steam.SteamService;
 import chaos.xcom.launcher.swing.SwingService;
 import chaos.xcom.launcher.util.ColorConstant;
+import com.codedisaster.steamworks.SteamUGC;
 import jakarta.enterprise.inject.spi.CDI;
 import org.apache.commons.lang3.StringUtils;
 import org.jdesktop.swingx.decorator.AbstractHighlighter;
@@ -87,10 +88,11 @@ public class ModTable extends XTable {
                             String input = JOptionPane.showInputDialog(SwingService.getLastActiveWindowBounds(),
                                     "Please enter correct Steam workshop mod ID.\nEmpty means reset to default",
                                     mod.getSteamMod().getSteamModId());
+                            input = StringUtils.trimToNull(input);
                             if (input == null) {
                                 return;
                             }
-                            getModService().setSteamModId(mod, input);
+                            getModService().setSteamModId(mod, Long.parseLong(input));
                         });
                         menu.add(changeSteamModIdItem);
                         menu.addSeparator();
@@ -111,7 +113,7 @@ public class ModTable extends XTable {
                 }
 
                 List<Mod> modsWithSteamId = selectedMods.stream()
-                        .filter(mod -> StringUtils.isNotBlank(mod.getSteamMod().getSteamModId()))
+                        .filter(mod -> mod.getSteamMod().getSteamModId() != null)
                         .toList();
                 if (!modsWithSteamId.isEmpty()) {
                     JMenuItem openSteamMod = new JMenuItem("Open mod in Steam");
@@ -127,7 +129,51 @@ public class ModTable extends XTable {
                     });
                     menu.add(syncSteamMod);
 
+                    JMenuItem menuItem = new JMenuItem("Update/Download Steam mod");
+                    menuItem.addActionListener(ae -> {
+                        getModService().downloadSteamMods(modsWithSteamId);
+                    });
+                    menu.add(menuItem);
 
+                    boolean anyModNotSubscribed = modsWithSteamId.stream().anyMatch(m -> !m.getSteamMod().getStates().contains(SteamUGC.ItemState.Subscribed));
+                    if (anyModNotSubscribed) {
+                        menuItem = new JMenuItem("Subscribe Steam mods");
+                        menuItem.addActionListener(ae -> {
+                            getModService().subscribeSteamMods(modsWithSteamId);
+                        });
+                        menu.add(menuItem);
+                    }
+
+                    boolean anyModSubscribed = modsWithSteamId.stream().anyMatch(m -> m.getSteamMod().getStates().contains(SteamUGC.ItemState.Subscribed));
+                    if (anyModSubscribed) {
+                        menuItem = new JMenuItem("Unsubscribe Steam mods");
+                        menuItem.addActionListener(ae -> {
+                            getModService().unsubscribeSteamMods(modsWithSteamId);
+                        });
+                        menu.add(menuItem);
+                    }
+                }
+
+                if (selectedMods.size() == 1) {
+                    Mod mod = selectedMods.get(0);
+                    if (mod.getDirectory().exists()) {
+                        JMenuItem menuItem = new JMenuItem("Delete mod directory");
+                        menuItem.addActionListener(ae -> {
+                            int result = JOptionPane.showConfirmDialog(SwingService.getLastActiveWindowBounds(),
+                                    "Are you sure want to delete this mod directory?\n" + mod.getDirectory().getAbsolutePath(),
+                                    "Exit confirmation",
+                                    JOptionPane.YES_NO_OPTION);
+                            if (JOptionPane.YES_OPTION == result) {
+                                try {
+                                    getModService().deleteModDir(mod);
+                                } catch (Exception ex) {
+                                    JOptionPane.showMessageDialog(SwingService.getLastActiveWindowBounds(), "Error deleting mod directory: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                                }
+                            }
+
+                        });
+                        menu.add(menuItem);
+                    }
                 }
 
                 // remove deleted mod from list

@@ -37,11 +37,10 @@ public class MainFormMenuBar extends JMenuBar {
         fileMenu.add(calculateModsSize);
 
         fileMenu.addSeparator();
-        JMenuItem syncAllSteamMods = new JMenuItem("Sync Steam info for all mods");
+        JMenuItem syncAllSteamMods = new JMenuItem("Sync Steam mods description and required mods all mods");
         fileMenu.add(syncAllSteamMods);
         syncAllSteamMods.addActionListener(e -> modService.get().syncAllSteamMods());
-        syncAllSteamMods.setToolTipText("Sync dependencies for required mods from steam workshop. "
-                + "\nShould not be called often. May take a long time if you have many mods.");
+        syncAllSteamMods.setToolTipText("Sync mods description and dependencies for required mods from steam workshop");
 
         JMenuItem syncMissingSteamMods = new JMenuItem("Sync Steam missing mods info");
         fileMenu.add(syncMissingSteamMods);

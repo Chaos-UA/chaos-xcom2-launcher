@@ -28,12 +28,12 @@ public class Mod {
     /**
      * If not null then it will be used.
      */
-    private String steamDbModId;
-    private TreeSet<String> steamAliasModIds = new TreeSet<>();
+    private Long steamDbModId;
+    private TreeSet<Long> steamAliasModIds = new TreeSet<>();
     /**
      * Parsed Steam ID from steam workshop directory.
      */
-    private String steamModIdByDirName;
+    private Long steamModIdByDirName;
     private SteamMod steamMod = new SteamMod();
     private boolean active;
     private boolean isNewMod = true;
@@ -89,15 +89,15 @@ public class Mod {
     }
 
     public String toIgnoredDependencyKey(ModDeclaredDependency dependency) {
-        String steamModId = null;
+        Long steamModId = null;
         if (dependency.getSteamRequiredMod() != null) {
             steamModId = dependency.getSteamRequiredMod().getSteamModId();
         }
         return toIgnoredDependencyKey(dependency.getMod(), dependency.getDependencyType(), dependency.getTargetMod(), steamModId);
     }
 
-    public String toIgnoredDependencyKey(String mod, DependencyType dependencyType, String targetMod, String steamModId) {
-        String nonDownloadedSteamModId = null;
+    public String toIgnoredDependencyKey(String mod, DependencyType dependencyType, String targetMod, Long steamModId) {
+        Long nonDownloadedSteamModId = null;
         if (targetMod == null) {
             nonDownloadedSteamModId = steamModId;
         }

@@ -5,6 +5,7 @@ import chaos.xcom.launcher.gui.component.event.XTableModel;
 import chaos.xcom.launcher.highlander.dto.HighlanderRunPriorityGroup;
 import chaos.xcom.launcher.mod.ModService;
 import chaos.xcom.launcher.mod.dto.Mod;
+import chaos.xcom.launcher.steam.SteamMod;
 import chaos.xcom.launcher.util.ComparatorUtils;
 import chaos.xcom.launcher.util.DateUtils;
 import chaos.xcom.launcher.util.FileUtils;
@@ -18,6 +19,7 @@ import javax.swing.table.TableRowSorter;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 public class ModTableModel extends XTableModel<Mod> {
@@ -51,7 +53,7 @@ public class ModTableModel extends XTableModel<Mod> {
             return text;
         }
     });
-    TableColumn STEAM_ID_COLUMN = new TableColumn<>("Steam ID", String.class, (Mod v) -> v.getSteamMod().getSteamModId());
+    TableColumn STEAM_ID_COLUMN = new TableColumn<>("Steam ID", Long.class, (Mod v) -> v.getSteamMod().getSteamModId());
 
     @Getter
     private List<Mod> mods;
@@ -76,6 +78,14 @@ public class ModTableModel extends XTableModel<Mod> {
                 DECLARED_DEPENDENCIES_COLUMN,
                 HIGHLANDER_GROUPS_COLUMN,
                 STEAM_ID_COLUMN,
+                new TableColumn<>("Steam state", String.class, (Mod v) -> {
+                    SteamMod steamMod = v.getSteamMod();
+                    if (steamMod.getStates().isEmpty()) {
+                        return "?";
+                    } else {
+                        return steamMod.getStates().stream().map(Enum::name).collect(Collectors.joining(", "));
+                    }
+                }),
                 new TableColumn<>("Steam sync at", String.class, (Mod v) -> {
                     if (v.getSteamMod().getUpdatedAt() == null) {
                         return "?";
