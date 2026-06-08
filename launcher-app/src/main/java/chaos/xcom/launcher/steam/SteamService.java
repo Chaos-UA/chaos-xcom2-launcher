@@ -155,7 +155,9 @@ public class SteamService {
                         SteamRequiredMod requiredMod = new SteamRequiredMod();
                         requiredMod.setSteamModId(requiredModId);
                         SteamModRecord requiredDbRecord = steamModDbMap.get(requiredModId);
-                        requiredMod.setSteamModName(requiredDbRecord.getTitle());
+                        if (requiredDbRecord != null) {
+                            requiredMod.setSteamModName(requiredDbRecord.getTitle());
+                        }
                         steamMod.getRequiredSteamMods().add(requiredMod);
                     }
                 }

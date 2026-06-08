@@ -410,7 +410,7 @@ public class ModService {
     public void onSteamSyncProgress(@ObservesAsync SteamSyncProgress steamSyncProgress) {
         SwingUtilities.invokeLater(() -> mainForm.onSteamSyncProgress(steamSyncProgress));
         if (steamSyncProgress.isComplete()) {
-            recalculateModDependencies();
+            reloadModsFromDirs();
         }
     }
 
@@ -516,12 +516,21 @@ public class ModService {
         });
     }
 
+    public void downloadSteamModsBySteamIds(List<Long> modsWithSteamId) {
+        steamService.downloadSteamModsAsync(modsWithSteamId, () -> {
+            calculateAllModsSizeAndSave();
+            steamService.syncSteamModsInAsync(modsWithSteamId);
+        });
+    }
+
     public void downloadSteamMods(List<Mod> modsWithSteamId) {
         List<Long> steamModIdsToDownload = prepareSteamModsForSync(modsWithSteamId);
-        steamService.downloadSteamModsAsync(steamModIdsToDownload, () -> {
-            calculateAllModsSizeAndSave();
-            steamService.syncSteamModsInAsync(new ArrayList<>(steamModIdsToDownload));
-        });
+        downloadSteamModsBySteamIds(steamModIdsToDownload);
+    }
+
+    public void subscribeSteamModsBySteamModIds(List<Long> steamModIds) {
+        steamService.subscribeSteamMods(steamModIds);
+        reloadModsFromDirs();
     }
 
     public void subscribeSteamMods(List<Mod> modsWithSteamId) {
@@ -529,8 +538,7 @@ public class ModService {
                 .map(v -> v.getSteamMod().getSteamModId())
                 .filter(Objects::nonNull)
                 .toList();
-        steamService.subscribeSteamMods(steamModIdsToSubscribe);
-        reloadModsFromDirs();
+        subscribeSteamModsBySteamModIds(steamModIdsToSubscribe);
     }
 
     public void unsubscribeSteamMods(List<Mod> modsWithSteamId) {

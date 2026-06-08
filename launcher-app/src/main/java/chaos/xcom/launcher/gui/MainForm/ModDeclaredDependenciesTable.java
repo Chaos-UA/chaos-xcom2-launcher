@@ -9,9 +9,11 @@ import chaos.xcom.launcher.mod.dto.DeclarationSource;
 import chaos.xcom.launcher.mod.dto.DependencyType;
 import chaos.xcom.launcher.mod.dto.Mod;
 import chaos.xcom.launcher.mod.dto.ModDeclaredDependency;
+import chaos.xcom.launcher.steam.SteamMod;
 import chaos.xcom.launcher.steam.SteamMod.SteamRequiredMod;
 import chaos.xcom.launcher.steam.SteamService;
 import chaos.xcom.launcher.util.ColorConstant;
+import com.codedisaster.steamworks.SteamUGC;
 import lombok.extern.slf4j.Slf4j;
 import org.jdesktop.swingx.decorator.AbstractHighlighter;
 import org.jdesktop.swingx.decorator.ComponentAdapter;
@@ -22,6 +24,7 @@ import java.awt.event.MouseEvent;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -84,10 +87,30 @@ public class ModDeclaredDependenciesTable extends XTable {
                     }
                     SteamRequiredMod steamRequiredMod = row.getSteamRequiredMod();
                     if (steamRequiredMod != null && steamRequiredMod.getSteamModId() != null) {
-                        JMenuItem browseSteamMod = new JMenuItem("Browse Steam mod - " + steamRequiredMod.getSteamModName());
-                        browseSteamMod.addActionListener(ae -> SteamService.openSteamModInBrowser(steamRequiredMod.getSteamModId()));
                         menu.addSeparator();
-                        menu.add(browseSteamMod);
+                        long steamModId =  steamRequiredMod.getSteamModId();
+
+                        JMenuItem menuItem = new JMenuItem("Browse Steam mod - " + steamRequiredMod.getSteamModName());
+                        menuItem.addActionListener(ae -> SteamService.openSteamModInBrowser(steamModId));
+                        menu.add(menuItem);
+
+                        ModService modService = ModService.get();
+                        SteamMod steamMod = modService.findDirectSteamMod(steamModId).orElse(null);
+                        if (steamMod == null || !steamMod.getStates().contains(SteamUGC.ItemState.Subscribed)) {
+                            menuItem = new JMenuItem("Subscribe Steam mod - " + steamRequiredMod.getSteamModName());
+                            menuItem.addActionListener(ae -> {
+                                modService.subscribeSteamModsBySteamModIds(List.of(steamModId));
+                                modService.downloadSteamModsBySteamIds(List.of(steamModId));
+                            });
+                            menu.add(menuItem);
+                        }
+                        if (steamMod != null) {
+                            menuItem = new JMenuItem("Download/Update Steam mod - " + steamRequiredMod.getSteamModName());
+                            menuItem.addActionListener(ae -> {
+                                modService.downloadSteamModsBySteamIds(List.of(steamModId));
+                            });
+                            menu.add(menuItem);
+                        }
                     }
                 }
 
