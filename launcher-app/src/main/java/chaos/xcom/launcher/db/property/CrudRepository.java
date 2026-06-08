@@ -4,11 +4,10 @@ import chaos.xcom.launcher.exception.InternalException;
 import lombok.Getter;
 import org.apache.commons.collections4.CollectionUtils;
 import org.jooq.*;
+import org.jooq.impl.DSL;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Provides common CRUD operations.
@@ -75,9 +74,25 @@ public abstract class CrudRepository<T extends UpdatableRecord<?>, ID> {
      * @return number of affected records.
      */
     public int save(Collection<T> records) {
+        return save(records, Set.of());
+    }
+
+    /**
+     * @param records to save, insert if not exist, and update if exist conflict.
+     * @return number of affected records.
+     */
+    public int save(Collection<T> records, Set<Field<?>> includedFields) {
         if (CollectionUtils.isEmpty(records)) {
             return 0;
         }
+
+        // 1. Build a map using ONLY the fields explicitly provided in the included set
+        Map<Field<?>, Object> updateMap = includedFields.stream()
+                .filter(v -> v != idField)
+                .collect(Collectors.toMap(
+                        field -> field,
+                        field -> DSL.excluded(field)
+                ));
 
         int batchSize = 50;
         int totalAffectedRows = 0;
@@ -91,15 +106,23 @@ public abstract class CrudRepository<T extends UpdatableRecord<?>, ID> {
             List<T> batch = recordList.subList(i, endIndex);
 
             // Execute the jOOQ insert for this specific batch and add to the total count
-            totalAffectedRows += dsl.insertInto(table)
+            var onDuplicateStep = dsl.insertInto(table)
                     .columns(table.fields())
                     .valuesOfRecords(batch)
-                    .onDuplicateKeyUpdate()
-                    .setAllToExcluded()
-                    .execute();
+                    .onDuplicateKeyUpdate();
+
+            var setOnDuplicateStep = updateMap.isEmpty()
+                    ? onDuplicateStep.setAllToExcluded()
+                    : onDuplicateStep.set(updateMap);
+
+            totalAffectedRows += setOnDuplicateStep.execute();
         }
 
         return totalAffectedRows;
+    }
+
+    public int saveIncluding(Collection<T> records, Set<Field<?>> includedFields) {
+        return save(records, includedFields);
     }
 
     public ID insertAndGetId(T record) {

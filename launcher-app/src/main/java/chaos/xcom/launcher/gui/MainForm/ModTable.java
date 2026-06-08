@@ -123,21 +123,21 @@ public class ModTable extends XTable {
                     });
                     menu.add(openSteamMod);
 
-                    JMenuItem syncSteamMod = new JMenuItem("Sync mod info from Steam");
-                    syncSteamMod.addActionListener(ae -> {
-                        getModService().syncSteamMods(modsWithSteamId);
-                    });
-                    menu.add(syncSteamMod);
-
-                    JMenuItem menuItem = new JMenuItem("Update/Download Steam mod");
+                    JMenuItem menuItem = new JMenuItem("Download/Update Steam mod");
                     menuItem.addActionListener(ae -> {
                         getModService().downloadSteamMods(modsWithSteamId);
                     });
                     menu.add(menuItem);
 
+                    JMenuItem syncSteamMod = new JMenuItem("Sync mod description and dependencies from Steam");
+                    syncSteamMod.addActionListener(ae -> {
+                        getModService().syncSteamMods(modsWithSteamId);
+                    });
+                    menu.add(syncSteamMod);
+
                     boolean anyModNotSubscribed = modsWithSteamId.stream().anyMatch(m -> !m.getSteamMod().getStates().contains(SteamUGC.ItemState.Subscribed));
                     if (anyModNotSubscribed) {
-                        menuItem = new JMenuItem("Subscribe Steam mods");
+                        menuItem = new JMenuItem("Subscribe Steam mod");
                         menuItem.addActionListener(ae -> {
                             getModService().subscribeSteamMods(modsWithSteamId);
                         });
@@ -146,7 +146,7 @@ public class ModTable extends XTable {
 
                     boolean anyModSubscribed = modsWithSteamId.stream().anyMatch(m -> m.getSteamMod().getStates().contains(SteamUGC.ItemState.Subscribed));
                     if (anyModSubscribed) {
-                        menuItem = new JMenuItem("Unsubscribe Steam mods");
+                        menuItem = new JMenuItem("Unsubscribe Steam mod");
                         menuItem.addActionListener(ae -> {
                             getModService().unsubscribeSteamMods(modsWithSteamId);
                         });
@@ -157,6 +157,7 @@ public class ModTable extends XTable {
                 if (selectedMods.size() == 1) {
                     Mod mod = selectedMods.get(0);
                     if (mod.getDirectory().exists()) {
+                        menu.addSeparator();
                         JMenuItem menuItem = new JMenuItem("Delete mod directory");
                         menuItem.addActionListener(ae -> {
                             int result = JOptionPane.showConfirmDialog(SwingService.getLastActiveWindowBounds(),

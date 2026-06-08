@@ -3,6 +3,7 @@ package chaos.xcom.launcher.gui.MainForm;
 import chaos.xcom.launcher.gui.SettingsDialog.SettingsService;
 import chaos.xcom.launcher.mod.ModService;
 import chaos.xcom.launcher.service.GameService;
+import chaos.xcom.launcher.swing.SwingService;
 import chaos.xcom.launcher.util.ImageUtils;
 import jakarta.annotation.PostConstruct;
 import jakarta.inject.Provider;
@@ -37,7 +38,27 @@ public class MainFormMenuBar extends JMenuBar {
         fileMenu.add(calculateModsSize);
 
         fileMenu.addSeparator();
-        JMenuItem syncAllSteamMods = new JMenuItem("Sync Steam mods description and required mods all mods");
+        JMenuItem menuItem = new JMenuItem("Download/Update all Steam mods");
+        fileMenu.add(menuItem);
+        menuItem.addActionListener(e -> modService.get().maybeDownloadAllSteamMods());
+        menuItem.setToolTipText("Download/Update all Steam mods (if lastUpdatedAt is after lastDownloadedAt), \ndescription and dependencies for required mods from steam workshop");
+
+        menuItem = new JMenuItem("Force Download/Update all Steam mods");
+        fileMenu.add(menuItem);
+        menuItem.addActionListener(e -> {
+            int result = JOptionPane.showConfirmDialog(SwingService.getLastActiveWindowBounds(),
+                    "Force Download/Update for all steam mods?",
+                    "Force all mods Download/Update",
+                    JOptionPane.YES_NO_OPTION);
+            if (JOptionPane.YES_OPTION == result) {
+                modService.get().forceDownloadAllSteamMods();
+            }
+        });
+        menuItem.setToolTipText("Force Download/Update all Steam mods (lastDownloadedAt will be erased), "
+                + "\ndescription and dependencies for required mods from steam workshop.");
+
+
+        JMenuItem syncAllSteamMods = new JMenuItem("Sync all Steam mods description and required mods dependencies");
         fileMenu.add(syncAllSteamMods);
         syncAllSteamMods.addActionListener(e -> modService.get().syncAllSteamMods());
         syncAllSteamMods.setToolTipText("Sync mods description and dependencies for required mods from steam workshop");
@@ -47,7 +68,7 @@ public class MainFormMenuBar extends JMenuBar {
         syncMissingSteamMods.addActionListener(e -> modService.get().syncMissingSteamMods());
 
         fileMenu.addSeparator();
-        JMenuItem menuItem = new JMenuItem("Exit");
+        menuItem = new JMenuItem("Exit");
         fileMenu.add(menuItem);
         menuItem.addActionListener(e -> launcherService.exitApp());
 

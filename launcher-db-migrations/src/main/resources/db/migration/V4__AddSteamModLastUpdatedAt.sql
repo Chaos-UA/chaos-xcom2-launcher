@@ -1,0 +1,1 @@
+ALTER TABLE steam_mod ADD COLUMN last_updated_at TIMESTAMP NULL;

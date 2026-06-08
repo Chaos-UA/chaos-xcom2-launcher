@@ -97,19 +97,18 @@ public class SteamClient {
                 throw new IllegalStateException("SteamAPI init failed. Is Steam running?");
             }
             steamUGC = new SteamUGC(new SteamUGCCallback() {
-                void handleCallback(Map<Long, CompletableFuture<ItemResult>> pendingOperations,
+                void handleCallback(String operation, Map<Long, CompletableFuture<ItemResult>> pendingOperations,
                                     SteamPublishedFileID publishedFileID, SteamResult result) {
                     Long originalId = getHandle(publishedFileID);
 
                     CompletableFuture<ItemResult> f = pendingOperations.remove(originalId);
                     if (f == null) {
-                        log.error("Received callback for known id {} but no pending future found. result: {}", originalId, result);
+                        log.debug("Received {} callback for known id {} but no pending future found. result: {}", operation, originalId, result);
                         return;
-
                     }
                     if (result != SteamResult.OK) {
                         f.completeExceptionally(new IllegalStateException(String.format(
-                                "Operation failed for id %s. result: %s", originalId, result)));
+                                "Operation %s failed for id %s. result: %s", operation, originalId, result)));
                         return;
                     } else {
                         f.complete(new ItemResult(originalId, result));
@@ -118,17 +117,17 @@ public class SteamClient {
 
                 @Override
                 public void onDownloadItemResult(int appID, SteamPublishedFileID publishedFileID, SteamResult result) {
-                    handleCallback(pendingDownloadOperations, publishedFileID, result);
+                    handleCallback("onDownloadItemResult", pendingDownloadOperations, publishedFileID, result);
                 }
 
                 @Override
                 public void onSubscribeItem(SteamPublishedFileID publishedFileID, SteamResult result) {
-                    handleCallback(pendingSubscribeOperations, publishedFileID, result);
+                    handleCallback("onSubscribeItem", pendingSubscribeOperations, publishedFileID, result);
                 }
 
                 @Override
                 public void onUnsubscribeItem(SteamPublishedFileID publishedFileID, SteamResult result) {
-                    handleCallback(pendingUnsubscribeOperations, publishedFileID, result);
+                    handleCallback("onUnsubscribeItem", pendingUnsubscribeOperations, publishedFileID, result);
                 }
 
                 @Override

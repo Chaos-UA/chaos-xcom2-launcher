@@ -1,0 +1,1 @@
+ALTER TABLE steam_mod ADD COLUMN last_download_at TIMESTAMP NULL;

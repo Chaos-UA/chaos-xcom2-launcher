@@ -10,6 +10,7 @@ import chaos.xcom.launcher.util.OsUtils;
 import chaos.xcom.launcher.util.XComIniUtils;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.inject.Singleton;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ObjectUtils;
@@ -104,6 +105,78 @@ public class GameService {
         }
     }
 
+    void createLinksDynamicBatch(List<ModLink> linksToCreate) {
+        if (!OsUtils.IS_WINDOWS) {
+            for (ModLink link : linksToCreate) {
+                createLink(link.getSourceModDir(), link.getTargetModDirLink());
+            }
+            return;
+        }
+        try { // creating many cmd processes takes time, to be faster lets do batching
+            if (linksToCreate == null || linksToCreate.isEmpty()) {
+                return;
+            }
+
+            // Windows hard limit is 8191. We use 8100 as a safe ceiling for the total command.
+            final int MAX_COMMAND_LENGTH = 8100;
+
+            StringBuilder currentBatch = new StringBuilder();
+            boolean isFirstInBatch = true;
+
+            for (ModLink modLink : linksToCreate) {
+                // 1. Build the individual command for this specific mod link
+                String singleCommand = String.format("mklink /J \"%s\" \"%s\"",
+                        modLink.getSourceModDir().getAbsolutePath(),
+                        modLink.getTargetModDirLink().getAbsolutePath());
+
+                // 2. Calculate how long the batch string will become if we add this command
+                int separatorLength = isFirstInBatch ? 0 : 3; // " & " is 3 characters
+                int projectedLength = currentBatch.length() + separatorLength + singleCommand.length();
+
+                // 3. If it exceeds our safety limit, ship the current batch out to cmd.exe first
+                if (projectedLength > MAX_COMMAND_LENGTH) {
+                    if (currentBatch.length() > 0) {
+                        executeCmdCommand(currentBatch.toString());
+                        currentBatch.setLength(0); // Flush the buffer
+                        isFirstInBatch = true;     // Reset the flag for the next batch
+                    }
+                }
+
+                // 4. Append the command to the current batch
+                if (!isFirstInBatch) {
+                    currentBatch.append(" & ");
+                }
+
+                currentBatch.append(singleCommand);
+                isFirstInBatch = false;
+            }
+
+            // 5. CRITICAL: Don't forget to execute whatever is left over in the final batch!
+            if (currentBatch.length() > 0) {
+                executeCmdCommand(currentBatch.toString());
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(SwingService.getLastActiveWindowBounds(),
+                    "Failed to create symbolic links for mods."
+                            + "\nError: " + e, "Error",
+                    JOptionPane.ERROR_MESSAGE);
+            log.error("Failed to create symbolic links", e);
+            throw new InternalException().cause(e);
+        }
+    }
+
+    private void executeCmdCommand(String batchedCommands) throws IOException, InterruptedException {
+        Process process = new ProcessBuilder("cmd", "/c", batchedCommands)
+                .inheritIO() // Keeps cmd output visible in your IDE console for debugging
+                .start();
+
+        int exitCode = process.waitFor();
+        if (exitCode != 0) {
+            // You can change InternalException to whatever custom exception your project uses
+            throw new RuntimeException("Junction creation batch failed with exit code: " + exitCode);
+        }
+    }
+
     private void startGame(File exeFile, List<String> exeCommands) throws IOException {
         ProcessBuilder pb = new ProcessBuilder(exeCommands);
         if (dbProps.gameLogEnabled.isTrue()) {
@@ -176,12 +249,17 @@ public class GameService {
         File targetTempModsDir = FileUtils.LAUNCHER_ACTIVE_MODS_DIRECTORY;
         log.info("Preparing {} mods directory: {}", mods.size(), targetTempModsDir);
         deleteAllLinksFromDir(targetTempModsDir);
+        List<ModLink> fileMapping = new ArrayList<>(mods.size());
         for (Mod mod : mods) {
             String paddedOrderNumber = String.format("%05d_", mod.getLoadOrder());
             File modDir = mod.getDirectory();
             File targetDir = new File(targetTempModsDir + "/" + paddedOrderNumber + mod.getId());
-            createLink(modDir, targetDir);
+            fileMapping.add(new ModLink(targetDir, modDir));
+            //createLink(modDir, targetDir);
         }
+        long startTime = System.currentTimeMillis();
+        createLinksDynamicBatch(fileMapping);
+        log.info("Created mods {} symbolic links in {} ms", fileMapping.size(), System.currentTimeMillis() - startTime);
     }
 
     ModService getModService() {
@@ -243,4 +321,11 @@ public class GameService {
             throw new InternalException().cause(e);
         }
     }
+
+    @Data
+    private static class ModLink {
+        private final File sourceModDir;
+        private final File targetModDirLink;
+    }
+
 }

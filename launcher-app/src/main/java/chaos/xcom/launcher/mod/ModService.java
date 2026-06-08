@@ -19,11 +19,8 @@ import chaos.xcom.launcher.mod.dto.*;
 import chaos.xcom.launcher.mod.dto.Mod.ModLoadOrderDeclaration;
 import chaos.xcom.launcher.mod.rule.UserModRuleRepository;
 import chaos.xcom.launcher.mod.rule.UserRuleDeclaration;
-import chaos.xcom.launcher.steam.SteamClient;
-import chaos.xcom.launcher.steam.SteamMod;
+import chaos.xcom.launcher.steam.*;
 import chaos.xcom.launcher.steam.SteamMod.SteamRequiredMod;
-import chaos.xcom.launcher.steam.SteamService;
-import chaos.xcom.launcher.steam.SteamSyncProgress;
 import chaos.xcom.launcher.swing.SwingService;
 import chaos.xcom.launcher.util.*;
 import chaos.xcom.launcher.util.SortUtils.SortItem;
@@ -32,6 +29,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import io.quarkus.runtime.Startup;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.event.ObservesAsync;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.inject.Singleton;
@@ -48,6 +46,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -374,10 +373,10 @@ public class ModService {
     }
 
     public Optional<SteamMod> findDirectSteamMod(Long steamModId) {
-        if (isSteamModIdAliasUsed(steamModId)) {
-            return Optional.ofNullable(steamMods.get(steamModId));
+        if (steamModId == null) {
+            return Optional.empty();
         }
-        return Optional.empty();
+        return Optional.ofNullable(steamMods.get(steamModId));
     }
 
     public void syncAllSteamMods() {
@@ -386,7 +385,7 @@ public class ModService {
 
     public void syncMissingSteamMods() {
         steamService.syncSteamModsInAsync(prepareSteamModsForSync(allMods.values().stream()
-                .filter(v -> v.getSteamMod().getUpdatedAt() == null)
+                .filter(v -> v.getSteamMod().getSyncedAt() == null)
                 .toList()));
     }
 
@@ -401,7 +400,7 @@ public class ModService {
         return mods.stream()
                 .filter(v -> v != null && v.getSteamMod().getSteamModId() != null)
                 .sorted(Comparator.comparing(
-                        mod -> mod.getSteamMod().getUpdatedAt(),
+                        mod -> mod.getSteamMod().getSyncedAt(),
                         Comparator.nullsFirst(Comparator.naturalOrder())
                 ))
                 .map(v -> v.getSteamMod().getSteamModId())
@@ -427,7 +426,7 @@ public class ModService {
             recalculateModDependencies();
         } else {
             log.info("No dependency changes detected in steam mod {} for mod {}", steamMod.getSteamModName(), mod.getId());
-            currentSteamMod.setUpdatedAt(steamMod.getUpdatedAt());
+            currentSteamMod.setSyncedAt(steamMod.getSyncedAt());
             currentSteamMod.setSteamModName(steamMod.getSteamModName());
             currentSteamMod.setDescription(steamMod.getDescription());
             currentSteamMod.setRequiredSteamMods(steamMod.getRequiredSteamMods());
@@ -474,12 +473,55 @@ public class ModService {
         return userRulesByMod.getOrDefault(mod.getId(), List.of()).size();
     }
 
+    public void onSteamModDownloaded(@Observes SteamModDownloadedEvent event) {
+        SteamMod steamMod = findDirectSteamMod(event.getSteamModId()).orElse(null);
+        if (steamMod != null) {
+            steamMod.setLastDownloadedAt(Instant.now());
+        }
+    }
+
+    public void forceDownloadAllSteamMods() {
+        for (SteamMod steamMod : steamMods.values()) {
+            steamMod.setLastDownloadedAt(null);
+        }
+        if (steamService.maybeShowDownloadInProgressDialog()) {
+            return;
+        }
+        steamService.eraseLastDownloadedAtForAll();
+        maybeDownloadAllSteamMods();
+    }
+
+    public void maybeDownloadAllSteamMods() {
+        if (steamService.maybeShowDownloadInProgressDialog()) {
+            return;
+        }
+        Thread.ofVirtual().start(() -> {
+
+            steamService.syncSteamModsViaSteamApi(prepareSteamModsForSync(allMods.values()));
+            SwingUtilities.invokeLater(() -> {
+                reloadModsFromDirs();
+                List<Mod> allSteamMods = new ArrayList<>();
+                for (Mod mod : allMods.values()) {
+                    SteamMod steamMod = mod.getSteamMod();
+                    if (steamMod.getSteamModId() == null) {
+                        continue;
+                    }
+                    if (!mod.isExist() || steamMod.getLastUpdatedAt() == null || steamMod.getLastDownloadedAt() == null
+                            || steamMod.getLastDownloadedAt().isBefore(steamMod.getLastUpdatedAt())) {
+                        allSteamMods.add(mod);
+                    }
+                }
+                downloadSteamMods(allSteamMods);
+            });
+        });
+    }
+
     public void downloadSteamMods(List<Mod> modsWithSteamId) {
-        List<Long> steamModIdsToDownload = modsWithSteamId.stream()
-                .map(v -> v.getSteamMod().getSteamModId())
-                .filter(Objects::nonNull)
-                .toList();
-        steamService.downloadSteamModsAsync(steamModIdsToDownload);
+        List<Long> steamModIdsToDownload = prepareSteamModsForSync(modsWithSteamId);
+        steamService.downloadSteamModsAsync(steamModIdsToDownload, () -> {
+            calculateAllModsSizeAndSave();
+            steamService.syncSteamModsInAsync(new ArrayList<>(steamModIdsToDownload));
+        });
     }
 
     public void subscribeSteamMods(List<Mod> modsWithSteamId) {
@@ -519,6 +561,8 @@ public class ModService {
         }
         reloadModsFromDirs();
     }
+
+
 
 
     @Data

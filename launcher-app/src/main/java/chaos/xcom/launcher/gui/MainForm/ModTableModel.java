@@ -9,6 +9,7 @@ import chaos.xcom.launcher.steam.SteamMod;
 import chaos.xcom.launcher.util.ComparatorUtils;
 import chaos.xcom.launcher.util.DateUtils;
 import chaos.xcom.launcher.util.FileUtils;
+import chaos.xcom.launcher.util.Longs;
 import jakarta.enterprise.inject.spi.CDI;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -53,7 +54,7 @@ public class ModTableModel extends XTableModel<Mod> {
             return text;
         }
     });
-    TableColumn STEAM_ID_COLUMN = new TableColumn<>("Steam ID", Long.class, (Mod v) -> v.getSteamMod().getSteamModId());
+    TableColumn STEAM_ID_COLUMN = new TableColumn<>("Steam ID", String.class, (Mod v) -> Longs.toString(v.getSteamMod().getSteamModId()));
 
     @Getter
     private List<Mod> mods;
@@ -86,11 +87,25 @@ public class ModTableModel extends XTableModel<Mod> {
                         return steamMod.getStates().stream().map(Enum::name).collect(Collectors.joining(", "));
                     }
                 }),
-                new TableColumn<>("Steam sync at", String.class, (Mod v) -> {
-                    if (v.getSteamMod().getUpdatedAt() == null) {
+                new TableColumn<>("Sync at (Steam)", String.class, (Mod v) -> {
+                    if (v.getSteamMod().getSyncedAt() == null) {
                         return "?";
                     } else {
-                        return DateUtils.format(v.getSteamMod().getUpdatedAt());
+                        return DateUtils.format(v.getSteamMod().getSyncedAt());
+                    }
+                }),
+                new TableColumn<>("Updated at (Steam)", String.class, (Mod v) -> {
+                    if (v.getSteamMod().getLastUpdatedAt() == null) {
+                        return "?";
+                    } else {
+                        return DateUtils.format(v.getSteamMod().getLastUpdatedAt());
+                    }
+                }),
+                new TableColumn<>("Downloaded at (Steam)", String.class, (Mod v) -> {
+                    if (v.getSteamMod().getLastDownloadedAt() == null) {
+                        return "?";
+                    } else {
+                        return DateUtils.format(v.getSteamMod().getLastDownloadedAt());
                     }
                 }),
                 new TableColumn<>("Modified at", String.class, (Mod v) -> {

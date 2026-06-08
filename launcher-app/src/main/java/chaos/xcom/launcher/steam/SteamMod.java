@@ -16,7 +16,9 @@ public class SteamMod {
 
     @ToString.Exclude
     private String description;
-    private Instant updatedAt;
+    private Instant syncedAt;
+    private Instant lastUpdatedAt;
+    private Instant lastDownloadedAt;
     private TreeSet<SteamUGC.ItemState> states = new TreeSet<>();
     private Set<SteamRequiredMod> requiredSteamMods = new LinkedHashSet<>();
 

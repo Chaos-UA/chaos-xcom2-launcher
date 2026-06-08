@@ -2,6 +2,7 @@ package chaos.xcom.launcher.event;
 
 import chaos.xcom.launcher.event.dto.PropertyChangedEvent;
 import chaos.xcom.launcher.steam.SteamMod;
+import chaos.xcom.launcher.steam.SteamModDownloadedEvent;
 import chaos.xcom.launcher.steam.SteamSyncProgress;
 import jakarta.enterprise.event.Event;
 import jakarta.inject.Singleton;
@@ -27,5 +28,9 @@ public class EventPublisher {
 
     public void publishAsync(SteamSyncProgress steamSyncProgress) {
         eventPublisher.fireAsync(steamSyncProgress);
+    }
+
+    public void publish(SteamModDownloadedEvent event) {
+        eventPublisher.fire(event);
     }
 }
