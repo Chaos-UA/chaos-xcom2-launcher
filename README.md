@@ -7,7 +7,6 @@ The launcher guarantee mods load order as it is shown in order column.
 This launcher helps you to:
 - Automatically resolve mod load order using declared dependencies (Steam, X2WOTCCommunityHighlander, and user rules).
 - Manually resolve mod load order for complex dependencies.
-- Specify manual mod load order and save it.
 - Show dependency problems (missing required mods, incompatible mods, cycles and more) and allow to resolve issues.
 - Inspect mod metadata and config files.
 - Read steam mod descriptions and other metadata.
